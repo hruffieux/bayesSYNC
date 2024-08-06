@@ -1,0 +1,30 @@
+Package: bayesSYNC
+Type: Package
+Title: BAYESian Model For High-dimensional Functional Factor Analysis Of Shared Latent dYNamiCs
+Version: 0.1.0
+Authors@R: c(
+    person("Selima", "Jaoua", 
+            email = "jaoua.selima23@gmail.com",
+            role = c("aut", "cre")),
+    person("Daniel", "Temko",
+           email = "daniel.temko@mrc-bsu.cam.ac.uk",
+           role = "aut"),
+    person("Helene", "Ruffieux",
+           email = "helene.ruffieux@mrc-bsu.cam.ac.uk",
+           role = "aut"))
+Description: High-dimensional factor model based on functional principal component
+    analysis (FPCA) using variational inference.
+Depends:
+    R (>= 4.0.0)
+License: GPL (>= 3)
+Encoding: UTF-8
+Imports:
+    ellipse,
+    lattice,
+    magic,
+    MASS,
+    matrixcalc,
+    pracma,
+    stats,
+    splines
+RoxygenNote: 7.3.1

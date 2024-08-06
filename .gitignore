@@ -1,0 +1,12 @@
+.Rapp.history
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.pdf
+.DS_Store
+
+# temporary files emacs
+*~
+[#]*[#]
+.\#*
