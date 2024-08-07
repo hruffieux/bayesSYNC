@@ -12,13 +12,15 @@
 #' @param K Number of spline functions (if applicable). Default is NULL.
 #' @param list_hyper Hyperparameter settings constructed using the function
 #'         \code{\link{set_hyper}}. If \code{NULL}, default hyperparameters will be used.
-#' @param n_mfvb Number of iterations for the mean-field variational Bayes algorithm. Default n_mfvb = 500.
 #' @param n_g Desired size for dense grid.
 #' @param time_g Dense grid provided as a vector of size \code{n_g}. If provided,
 #'               then \code{n_g} must be \code{NULL} as it will be taken to be
 #'               \code{length(time_g)}.
 #' @param Psi_g Reference eigenfunctions (if available, e.g., in simulations)
 #'              used to flip the sign of the resulting scores and eigenfunctions.
+#' @param tol_abs Tolerance on the absolute changes in the ELBO.
+#' @param tol_rel Tolerance on the relative changes in the ELBO.
+#' @param maxit Number of iterations for the mean-field variational Bayes algorithm. Default maxit = 500.
 #' @param verbose Boolean indicating whether messages should be printed during
 #'                the run. Default is TRUE.
 #' @param seed User-specified seed for reproducibility.
@@ -27,15 +29,16 @@
 #'
 #' @export
 #'
-# bayesSYNC <- function(time_obs, Y, L, K = NULL, list_hyper = NULL, n_mfvb = 500,
+# bayesSYNC <- function(time_obs, Y, L, K = NULL, list_hyper = NULL, maxit = 500,
 #                   n_g = 1000, time_g = NULL, Psi_g = NULL, verbose = TRUE, seed = NULL) {
 #   # Function implementation here
 # }
 
 bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
-                                    list_hyper = NULL, n_mfvb = 500,
-                                    n_g = 1000, time_g = NULL,
-                                    Psi_g = NULL, verbose = TRUE, seed = NULL) {
+                      list_hyper = NULL,
+                      n_g = 1000, time_g = NULL,
+                      Psi_g = NULL, tol_abs = 1e-3,
+                      tol_rel = 1e-5, maxit = 500, verbose = TRUE, seed = NULL) {
 
   check_structure(seed, "vector", "numeric", 1, null_ok = TRUE)
   if (!is.null(seed)) {
@@ -51,7 +54,7 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
   check_natural(L)
 
   if (is.null(list_hyper)) {
-  list_hyper <- set_hyper(d_0 = p)
+    list_hyper <- set_hyper(d_0 = p)
   } else if (!inherits(list_hyper, "hyper")) {
     stop(paste0("The provided list_hyper must be an object of class ",
                 "``hyper''. \n *** you must either use the ",
@@ -59,22 +62,13 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
                 "list_hyper to NULL for automatic choice. ***"))
   }
 
-  sigma_zeta <- list_hyper$sigma_zeta
-  mu_beta <- list_hyper$mu_beta
-  Sigma_beta <- list_hyper$Sigma_beta
-  A <- list_hyper$A
-  c_0 <- list_hyper$c_0
-  d_0 <- list_hyper$d_0
-  alpha_0 <- list_hyper$alpha_0
-  beta_0 <- list_hyper$beta_0
-
   check_structure(n_g, "vector", "numeric", 1, null_ok = TRUE)
   if (!is.null(n_g)) check_natural(n_g)
 
   check_structure(time_g, "vector", "numeric", null_ok = TRUE)
 
-  check_structure(n_mfvb, "vector", "numeric", 1)
-  check_natural(n_mfvb)
+  check_structure(maxit, "vector", "numeric", 1)
+  check_natural(maxit)
 
   check_structure(verbose, "vector", "logical", 1)
 
@@ -130,78 +124,76 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
   }
 
 
-  mfvb_gauss_fadyfpca(n_mfvb, N= N, p=p, L=L,Q=Q, K=K, C = C, Y = Y,
-                      sigma_zeta = sigma_zeta, mu_beta = mu_beta,
-                      Sigma_beta = Sigma_beta,
-                      A = A, c_0 = c_0, d_0 = d_0, alpha_0 = alpha_0,
-                      beta_0 = beta_0, time_obs = time_obs,n_g =n_g,
-                      time_g =time_g,C_g =C_g, verbose = verbose)
+  bayesSYNC_core(N= N, p=p, L=L, Q=Q, K=K, C = C, Y = Y, list_hyper,
+                      time_obs = time_obs,n_g =n_g,
+                      time_g =time_g,C_g =C_g, tol_abs = tol_abs,
+                      tol_rel = tol_rel, maxit = maxit, verbose = verbose)
 
 }
 
-mfvb_gauss_fadyfpca<- function(n_mfvb, N, p, L,Q, K, C, Y, sigma_zeta, mu_beta,
-                               Sigma_beta, A, c_0,d_0, alpha_0, beta_0, time_obs,
-                               n_g, time_g, C_g,verbose) {
+
+bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
+                           time_g, C_g, tol_abs, tol_rel, maxit, verbose) {
 
   eps <- .Machine$double.eps^0.5
 
+  sigma_zeta <- list_hyper$sigma_zeta
+  mu_beta <- list_hyper$mu_beta
+  Sigma_beta <- list_hyper$Sigma_beta
+  A <- list_hyper$A
+  c_0 <- list_hyper$c_0
+  d_0 <- list_hyper$d_0
+  alpha_0 <- list_hyper$alpha_0
+  beta_0 <- list_hyper$beta_0
+
   T_vec <- sapply(Y, length)
-  # Initialize the parameters
-  inv_Sigma_zeta <- solve(sigma_zeta* diag(L))
+
+  inv_Sigma_zeta <- 1/sigma_zeta^2*diag(L)
   inv_Sigma_beta <- solve(Sigma_beta)
-  sigma_beta <-Sigma_beta[1,1]
 
   mu_q_zeta <- vector("list", length = N)
   Sigma_q_zeta <- vector("list", length = N)
-  generate_vector_L<- function() { return(rep(0.5, L))}
-  generate_matrix_L<- function() { return(diag(L))}
 
-  generate_list_of_vectors<- function(){ return (replicate(Q, generate_vector_L(), simplify=FALSE))}
-  generate_list_of_matrix <- function(){ return (replicate(Q, generate_matrix_L(), simplify=FALSE))}
-  mu_q_zeta<-replicate(N, generate_list_of_vectors(), simplify = FALSE)
-  Sigma_q_zeta<- replicate(N, generate_list_of_matrix(), simplify = FALSE)
+  mu_q_zeta <- lapply(1:N, function(i) lapply(1:Q, function(q) return(rep(0.5, L))))
+  Sigma_q_zeta<- lapply(1:N, function(i) lapply(1:Q, function(q) diag(L)))
 
-  mu_q_recip_sigsq_mu  <- rep(1, p)
-  mu_q_recip_sigsq_eps <- rep(1, p)
+  mu_q_recip_sigsq_mu  <- mu_q_recip_sigsq_eps <- rep(1, p)
   mu_q_recip_sigsq_phi <- matrix(1, nrow = Q, ncol = L)
 
-  kappa_q_sigsq_mu <- K/2 + 0.5
-  kappa_q_a_mu <- 1
+  kappa_q_sigsq_mu <- kappa_q_sigsq_phi <- K/2 + 0.5
+  kappa_q_a_mu <- kappa_q_a_eps <- kappa_q_a_phi <- 1
   kappa_q_sigsq_eps <- sum(sapply(time_obs, function(x) length (x)))/2 + 0.5
-  kappa_q_a_eps <- 1
-  kappa_q_sigsq_phi <- K/2 + 0.5
-  kappa_q_a_phi <- 1
 
-  mu_q_normal_b<- matrix(rnorm(p*Q, 0,1), nrow = p, ncol = Q)
-  mu_q_b <-mu_q_normal_b
-  Sigma_q_normal_b<- matrix(1, nrow= p, ncol= Q)
-  mu_q_gamma <- matrix(1, nrow = p, ncol = Q)
+  mu_q_normal_b <- matrix(rnorm(p*Q, 0,1), nrow = p, ncol = Q)
+  mu_q_b <- mu_q_normal_b
+  Sigma_q_normal_b <- mu_q_gamma <- matrix(1, nrow= p, ncol= Q)
 
   mu_q_alpha <- rep(1, Q)
 
-  generate_vector_K<- function() { return(rep(0.5, K+2))}
-  generate_list_of_vectors<- function(){ return (replicate(L, generate_vector_K(), simplify=FALSE))}
-  mu_q_nu_phi <- replicate(Q, generate_list_of_vectors(), simplify = FALSE)
-  mu_q_recip_a_mu <- rep(1, p)
-  mu_q_recip_a_eps <- rep(1, p)
+  mu_q_nu_phi <- lapply(1:Q, function(q) lapply(1:L, function(l) rep(0.5, K+2)))
+  mu_q_recip_a_mu <- mu_q_recip_a_eps <- rep(1, p)
   mu_q_recip_a_phi <- matrix(1, nrow = Q, ncol = L)
-  ELBO <- rep(0, n_mfvb)
-  for(i_iter in 1:n_mfvb) {
-    cat("starting iteration", i_iter, "of", n_mfvb, "\n")
+
+  list_cp_C <- lapply(1:N, function(i) crossprod(C[[i]]))
+
+  ELBO <- NULL
+  for(i_iter in 1:maxit) {
+
+    cat("Iteration", i_iter, "\n")
+
     # Update of q(nu_mu):
     Sigma_q_nu_mu <- vector("list", length = p)
     mu_q_nu_mu <- vector("list", length = p)
 
     for (j in 1:p){
-      sum_term_Sigma_j <- 0
-      sum_term_mu_j <- 0
+      sum_term_Sigma_j <- sum_term_mu_j <- 0
 
       for(i in 1:N) {
-        sum_term_Sigma_j <- sum_term_Sigma_j + crossprod(C[[i]])
+        sum_term_Sigma_j <- sum_term_Sigma_j + list_cp_C[[i]]
         sum_val <-0
         for (q in 1:Q){
           for (l in 1:L){
-            sum_val <- sum_val+mu_q_b[j,q]*mu_q_zeta[[i]][[q]][l]*(C[[i]]%*%mu_q_nu_phi[[q]][[l]])
+            sum_val <- sum_val + mu_q_b[j,q]*mu_q_zeta[[i]][[q]][l]*(C[[i]]%*%mu_q_nu_phi[[q]][[l]])
           }
         }
         sum_term_mu_j <- sum_term_mu_j + t(C[[i]])%*%(Y[[i]][[j]]-sum_val)
@@ -233,14 +225,13 @@ mfvb_gauss_fadyfpca<- function(n_mfvb, N, p, L,Q, K, C, Y, sigma_zeta, mu_beta,
           sum_val_2 <-sum_val_2 + E_q_b_square_jq* mu_q_recip_sigsq_eps[j]
         }
 
-        sum_val <-0
+        sum_val <- 0
         for (i in 1:N){
-          E_q_zeta_square_iql <- Sigma_q_zeta[[i]][[q]][l,l]+ (mu_q_zeta[[i]][[q]][l]^2)
-          sum_val <-sum_val+ E_q_zeta_square_iql*crossprod(C[[i]])
+          E_q_zeta_square_iql <- Sigma_q_zeta[[i]][[q]][l,l] + (mu_q_zeta[[i]][[q]][l]^2)
+          sum_val <- sum_val + E_q_zeta_square_iql*list_cp_C[[i]]
         }
 
-        sum_term_mu_ql <-0
-
+        sum_term_mu_ql <- 0
         for (i in 1:N){
           for (j in 1:p){
 
@@ -253,11 +244,11 @@ mfvb_gauss_fadyfpca<- function(n_mfvb, N, p, L,Q, K, C, Y, sigma_zeta, mu_beta,
                   if (q_tilde ==q){
                     sum_val_ql_prime <- sum_val_ql_prime+ (mu_q_normal_b[j,q]^2+Sigma_q_normal_b[j,q])*mu_q_gamma[j,q]*
                       (mu_q_zeta[[i]][[q_tilde]][l_tilde]*mu_q_zeta[[i]][[q]][l]+ Sigma_q_zeta[[i]][[q]][l,l_tilde])*
-                      (crossprod(C[[i]])%*% mu_q_nu_phi[[q_tilde]][[l_tilde]])
+                      (list_cp_C[[i]]%*% mu_q_nu_phi[[q_tilde]][[l_tilde]])
                   } else {
                     sum_val_ql_prime <- sum_val_ql_prime+ mu_q_b[j,q]*mu_q_b[j,q_tilde]*
                       mu_q_zeta[[i]][[q_tilde]][l_tilde]*mu_q_zeta[[i]][[q]][l]*
-                      (crossprod(C[[i]])%*% mu_q_nu_phi[[q_tilde]][[l_tilde]])
+                      (list_cp_C[[i]]%*% mu_q_nu_phi[[q_tilde]][[l_tilde]])
                   }
                 }
               }
@@ -294,9 +285,9 @@ mfvb_gauss_fadyfpca<- function(n_mfvb, N, p, L,Q, K, C, Y, sigma_zeta, mu_beta,
         mu_V_q_phi <- matrix(NA,nrow = K+2, ncol = L)
         for (l in 1:L){
           mu_V_q_phi[,l]<- mu_q_nu_phi[[q]][[l]]
-          tr_term[l,l] <- tr( crossprod(C[[i]])%*% Sigma_q_nu_phi[[q]][[l]])
+          tr_term[l,l] <- tr( list_cp_C[[i]]%*% Sigma_q_nu_phi[[q]][[l]])
         }
-        mu_H_q_phi <- t(mu_V_q_phi)%*%crossprod(C[[i]])%*%mu_V_q_phi + tr_term
+        mu_H_q_phi <- t(mu_V_q_phi)%*%list_cp_C[[i]]%*%mu_V_q_phi + tr_term
         Sigma_q_zeta[[i]][[q]]<- solve(sum_sigma*mu_H_q_phi + inv_Sigma_zeta)
         #Sigma_q_zeta[[i]][[q]]<- diag(L)
         mu_q_zeta[[i]][[q]] <- as.vector(Sigma_q_zeta[[i]][[q]]%*%(t(mu_V_q_phi)%*%t(C[[i]])%*%sum_mu))
@@ -325,17 +316,17 @@ mfvb_gauss_fadyfpca<- function(n_mfvb, N, p, L,Q, K, C, Y, sigma_zeta, mu_beta,
       sum_val_phi <-0
       for (i in 1:N){
         sum_val_y <- sum_val_y+ crossprod(Y[[i]][[j]])-2*t(mu_q_nu_mu[[j]])%*%t(C[[i]])%*%Y[[i]][[j]]
-        sum_val_mu <- sum_val_mu+ t(mu_q_nu_mu[[j]])%*%crossprod(C[[i]])%*%mu_q_nu_mu[[j]]+ tr (crossprod(C[[i]])%*% Sigma_q_nu_mu[[j]])
+        sum_val_mu <- sum_val_mu+ t(mu_q_nu_mu[[j]])%*%list_cp_C[[i]]%*%mu_q_nu_mu[[j]]+ tr (list_cp_C[[i]]%*% Sigma_q_nu_mu[[j]])
         for (q in 1:Q){
           mu_V_q_phi <- matrix(NA,nrow = K+2, ncol = L)
           tr_term <- diag(L)
           for (l in 1:L){
             mu_V_q_phi[,l]<- mu_q_nu_phi[[q]][[l]]
-            tr_term[l,l] <- tr( crossprod(C[[i]])%*% Sigma_q_nu_phi[[q]][[l]])
+            tr_term[l,l] <- tr( list_cp_C[[i]]%*% Sigma_q_nu_phi[[q]][[l]])
           }
-          mu_H_q_phi <- t(mu_V_q_phi)%*%crossprod(C[[i]])%*%mu_V_q_phi + tr_term
+          mu_H_q_phi <- t(mu_V_q_phi)%*%list_cp_C[[i]]%*%mu_V_q_phi + tr_term
           sum_val_y <- sum_val_y-2*mu_q_b[j,q]*t(mu_q_zeta[[i]][[q]])%*%t(mu_V_q_phi)%*%t(C[[i]])%*%Y[[i]][[j]]
-          sum_val_mu <- sum_val_mu+2*mu_q_b[j,q]*t(mu_q_zeta[[i]][[q]])%*%t(mu_V_q_phi)%*%crossprod(C[[i]])%*%mu_q_nu_mu[[j]]
+          sum_val_mu <- sum_val_mu+2*mu_q_b[j,q]*t(mu_q_zeta[[i]][[q]])%*%t(mu_V_q_phi)%*%list_cp_C[[i]]%*%mu_q_nu_mu[[j]]
           sum_val_phi<- sum_val_phi + (mu_q_normal_b[j,q]^2+Sigma_q_normal_b[j,q])*mu_q_gamma[j,q]*
             tr(mu_H_q_phi%*%(Sigma_q_zeta[[i]][[q]]+mu_q_zeta[[i]][[q]]%*%t(mu_q_zeta[[i]][[q]])))
           sum_val_phi_q_tilde <- rep(0, length(time_obs[[i]]))
@@ -437,9 +428,9 @@ mfvb_gauss_fadyfpca<- function(n_mfvb, N, p, L,Q, K, C, Y, sigma_zeta, mu_beta,
           trace_term <- diag(L)
           for (l in 1:L){
             mu_V_q_phi[,l]<- mu_q_nu_phi[[q]][[l]]
-            trace_term[l,l]<- tr( crossprod(C[[i]])%*% Sigma_q_nu_phi[[q]][[l]])
+            trace_term[l,l]<- tr( list_cp_C[[i]]%*% Sigma_q_nu_phi[[q]][[l]])
           }
-          mu_H_q_phi <- t(mu_V_q_phi)%*%crossprod(C[[i]])%*%mu_V_q_phi+ trace_term
+          mu_H_q_phi <- t(mu_V_q_phi)%*%list_cp_C[[i]]%*%mu_V_q_phi+ trace_term
           sum_sigma<-sum_sigma+tr(mu_H_q_phi%*%(Sigma_q_zeta[[i]][[q]]+mu_q_zeta[[i]][[q]]%*%t(mu_q_zeta[[i]][[q]])))
           sum_mu_tilde <- rep(0, K+2 )
           for (q_tilde in 1:Q){
@@ -468,7 +459,7 @@ mfvb_gauss_fadyfpca<- function(n_mfvb, N, p, L,Q, K, C, Y, sigma_zeta, mu_beta,
 
     #COMPUTE ELBO
     ELBO_iter <- sum(sapply(1:p, function (j) {-(sum(sapply(time_obs, function(x) length (x)))/2)*(log(2*pi)+ mu_q_log_sigsq_eps[j])-
-                              mu_q_recip_sigsq_eps[j]*( lambda_q_sigsq_eps[j]- mu_q_recip_a_eps[j])} ))#term of Y
+        mu_q_recip_sigsq_eps[j]*( lambda_q_sigsq_eps[j]- mu_q_recip_a_eps[j])} ))#term of Y
     ELBO_iter <- ELBO_iter+ sum(sapply(1:p, function(j){
       E_q_inv_Sigma_nu_mu <- blkdiag(
         inv_Sigma_beta,
@@ -506,7 +497,7 @@ mfvb_gauss_fadyfpca<- function(n_mfvb, N, p, L,Q, K, C, Y, sigma_zeta, mu_beta,
         E_q_inv_Sigma_nu_phi <- blkdiag(
           inv_Sigma_beta,
           mu_q_recip_sigsq_phi[q,l]*diag(K)
-          )
+        )
         log_det_q_l_obj <- determinant(Sigma_q_nu_phi[[q]][[l]], logarithm = TRUE)
         log_det_q_l <- log_det_q_l_obj$modulus * log_det_q_l_obj$sign
         -1*log(sigma_zeta)+ 0.5*log_det_q_l-(K/2)*(mu_q_log_sigsq_phi[q,l])-
@@ -522,7 +513,7 @@ mfvb_gauss_fadyfpca<- function(n_mfvb, N, p, L,Q, K, C, Y, sigma_zeta, mu_beta,
 
       }))
     }))
-    ELBO[i_iter]<- ELBO_iter
+    ELBO <- c(ELBO, ELBO_iter)
 
     if (i_iter >1 && (ELBO[i_iter] - ELBO[i_iter-1]) < -eps){
       print(paste0("Error : THE ELBO IS DECREASING, difference: ", ELBO[i_iter] - ELBO[i_iter-1]))
@@ -530,8 +521,6 @@ mfvb_gauss_fadyfpca<- function(n_mfvb, N, p, L,Q, K, C, Y, sigma_zeta, mu_beta,
     if (i_iter >1){
       message(i_iter, ":", ELBO[i_iter] - ELBO[i_iter-1])
     }
-    tol_abs <- 1e-3
-    tol_rel <- 1e-5
     if (i_iter >1){
       rel_converged <- (abs(ELBO[i_iter]/ELBO[i_iter-1] - 1) < tol_rel)
       abs_converged <- ((ELBO[i_iter] - ELBO[i_iter-1])/N< tol_abs)
@@ -565,7 +554,7 @@ mfvb_gauss_fadyfpca<- function(n_mfvb, N, p, L,Q, K, C, Y, sigma_zeta, mu_beta,
   list_list_zeta_ellipse <- res_orth$list_list_zeta_ellipse
 
   if (!is.null(res_orth$mu_q_b_norm)) {
-    mu_q_b  <- res_orth$mu_q_b_norm
+    mu_q_b  <- res_orth$mu_q_b_norm # QUESTION
   }
 
   res <- create_named_list(K, list_Y_hat, list_Y_low, list_Y_upp,
@@ -573,7 +562,7 @@ mfvb_gauss_fadyfpca<- function(n_mfvb, N, p, L,Q, K, C, Y, sigma_zeta, mu_beta,
                            list_Zeta_hat, list_Cov_zeta_hat, list_list_zeta_ellipse,
                            Sigma_q_nu_mu,mu_q_nu_mu, Sigma_q_nu_phi,mu_q_nu_phi,mu_q_zeta, Sigma_q_zeta, sigsq_eps,
                            lambda_q_sigsq_phi, lambda_q_a_phi, lambda_q_sigsq_mu, lambda_q_a_mu, lambda_q_sigsq_eps,
-                           lambda_q_a_eps, mu_q_b,Sigma_q_normal_b,mu_q_gamma,mu_q_alpha, ELBO,n_g, time_g, C_g)
+                           lambda_q_a_eps, mu_q_b,Sigma_q_normal_b,mu_q_gamma,mu_q_alpha, ELBO, n_g, time_g, C_g)
 
 
 }
