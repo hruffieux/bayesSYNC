@@ -26,5 +26,6 @@ Imports:
     matrixcalc,
     pracma,
     stats,
-    splines
+    splines,
+    parallel
 RoxygenNote: 7.3.1

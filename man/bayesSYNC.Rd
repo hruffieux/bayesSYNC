@@ -11,10 +11,12 @@ bayesSYNC(
   Q,
   K = NULL,
   list_hyper = NULL,
-  n_mfvb = 500,
   n_g = 1000,
   time_g = NULL,
   Psi_g = NULL,
+  tol_abs = 0.001,
+  tol_rel = 1e-05,
+  maxit = 500,
   verbose = TRUE,
   seed = NULL
 )
@@ -35,8 +37,6 @@ of observations for univariate or multivariate curves, respectively.}
 \item{list_hyper}{Hyperparameter settings constructed using the function
 \code{\link{set_hyper}}. If \code{NULL}, default hyperparameters will be used.}
 
-\item{n_mfvb}{Number of iterations for the mean-field variational Bayes algorithm. Default n_mfvb = 500.}
-
 \item{n_g}{Desired size for dense grid.}
 
 \item{time_g}{Dense grid provided as a vector of size \code{n_g}. If provided,
@@ -46,13 +46,19 @@ then \code{n_g} must be \code{NULL} as it will be taken to be
 \item{Psi_g}{Reference eigenfunctions (if available, e.g., in simulations)
 used to flip the sign of the resulting scores and eigenfunctions.}
 
+\item{tol_abs}{Tolerance on the absolute changes in the ELBO.}
+
+\item{tol_rel}{Tolerance on the relative changes in the ELBO.}
+
+\item{maxit}{Number of iterations for the mean-field variational Bayes algorithm. Default maxit = 500.}
+
 \item{verbose}{Boolean indicating whether messages should be printed during
 the run. Default is TRUE.}
 
 \item{seed}{User-specified seed for reproducibility.}
 }
 \value{
-An object containing the resulting FLASH estimates.
+An object containing the resulting estimates.
 }
 \description{
 This function performs functional analysis to uncover shared latent dynamics

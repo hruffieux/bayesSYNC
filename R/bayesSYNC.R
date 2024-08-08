@@ -21,6 +21,7 @@
 #' @param tol_abs Tolerance on the absolute changes in the ELBO.
 #' @param tol_rel Tolerance on the relative changes in the ELBO.
 #' @param maxit Number of iterations for the mean-field variational Bayes algorithm. Default maxit = 500.
+#' @param n_cpus User-sepcieid number of CPU to be used for parallel execution. Default n_cpus = 1 for serial execution.
 #' @param verbose Boolean indicating whether messages should be printed during
 #'                the run. Default is TRUE.
 #' @param seed User-specified seed for reproducibility.
@@ -38,7 +39,7 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
                       list_hyper = NULL,
                       n_g = 1000, time_g = NULL,
                       Psi_g = NULL, tol_abs = 1e-3,
-                      tol_rel = 1e-5, maxit = 500, verbose = TRUE, seed = NULL) {
+                      tol_rel = 1e-5, maxit = 500, n_cpus = 1, verbose = TRUE, seed = NULL) {
 
   check_structure(seed, "vector", "numeric", 1, null_ok = TRUE)
   if (!is.null(seed)) {
@@ -127,13 +128,13 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
   bayesSYNC_core(N= N, p=p, L=L, Q=Q, K=K, C = C, Y = Y, list_hyper,
                       time_obs = time_obs,n_g =n_g,
                       time_g =time_g,C_g =C_g, tol_abs = tol_abs,
-                      tol_rel = tol_rel, maxit = maxit, verbose = verbose)
+                      tol_rel = tol_rel, maxit = maxit, n_cpus = n_cpus, verbose = verbose)
 
 }
 
 
 bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
-                           time_g, C_g, tol_abs, tol_rel, maxit, verbose) {
+                           time_g, C_g, tol_abs, tol_rel, maxit, n_cpus, verbose) {
 
   eps <- .Machine$double.eps^0.5
 
@@ -185,28 +186,48 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
     Sigma_q_nu_mu <- vector("list", length = p)
     mu_q_nu_mu <- vector("list", length = p)
 
-    for (j in 1:p){
-      sum_term_Sigma_j <- sum_term_mu_j <- 0
+    sum_list_cp_C <- Reduce("+", list_cp_C)
 
-      for(i in 1:N) {
-        sum_term_Sigma_j <- sum_term_Sigma_j + list_cp_C[[i]]
-        sum_val <-0
-        for (q in 1:Q){
-          for (l in 1:L){
-            sum_val <- sum_val + mu_q_b[j,q]*mu_q_zeta[[i]][[q]][l]*(C[[i]]%*%mu_q_nu_phi[[q]][[l]])
-          }
-        }
-        sum_term_mu_j <- sum_term_mu_j + t(C[[i]])%*%(Y[[i]][[j]]-sum_val)
-      }
-      E_q_inv_Sigma_nu_mu <- blkdiag(
-        inv_Sigma_beta,
-        mu_q_recip_sigsq_mu[j]*diag(K)
-      )
-      Sigma_q_nu_mu_j <- solve (E_q_inv_Sigma_nu_mu + mu_q_recip_sigsq_eps[j]* sum_term_Sigma_j)
-      mu_q_nu_mu_j <- as.vector(Sigma_q_nu_mu_j %*%(mu_q_recip_sigsq_eps[j]*sum_term_mu_j))
-      Sigma_q_nu_mu[[j]] <- unlist(Sigma_q_nu_mu_j)
-      mu_q_nu_mu[[j]]<- unlist(mu_q_nu_mu_j)
-    }
+    E_q_inv_Sigma_nu_mu <- lapply(1:p, function(j) blkdiag(inv_Sigma_beta,
+                                                           mu_q_recip_sigsq_mu[j]*diag(K)))
+
+    Sigma_q_nu_mu <- lapply(1:p, function(j) solve(E_q_inv_Sigma_nu_mu[[j]] + mu_q_recip_sigsq_eps[j]* sum_list_cp_C))
+
+    ##  ---- for-loop version ---
+    # for (j in 1:p){
+    #   sum_term_mu_j <- 0
+    #   for(i in 1:N) {
+    #     sum_val <- 0
+    #     for (q in 1:Q){
+    #       for (l in 1:L){
+    #         sum_val <- sum_val + mu_q_b[j,q]*mu_q_zeta[[i]][[q]][l]*(C[[i]]%*%mu_q_nu_phi[[q]][[l]])
+    #       }
+    #     }
+    #     sum_term_mu_j <- sum_term_mu_j + t(C[[i]])%*%(Y[[i]][[j]]-sum_val)
+    #   }
+    #   mu_q_nu_mu_j <- as.vector(Sigma_q_nu_mu[[j]] %*%(mu_q_recip_sigsq_eps[j]*sum_term_mu_j))
+    #   mu_q_nu_mu[[j]]<- unlist(mu_q_nu_mu_j)
+    # }
+    # ----
+
+    ##  ---- apply version ---
+    mu_q_nu_mu <- parallel::mclapply(1:p, function(j) {
+
+      sum_term_mu_j <- rowSums(sapply(1:N, function(i) {
+
+        sum_val_i_j <- rowSums(sapply(1:Q, function(q) {
+          rowSums(sapply(1:L, function(l) mu_q_b[j,q]*mu_q_zeta[[i]][[q]][l]*(C[[i]]%*%mu_q_nu_phi[[q]][[l]])))
+          }))
+
+        crossprod(C[[i]], Y[[i]][[j]] - sum_val_i_j)
+
+      }))
+
+      as.vector(Sigma_q_nu_mu[[j]] %*%(mu_q_recip_sigsq_eps[j]*sum_term_mu_j))
+
+    }, mc.cores = n_cpus)
+    # ----
+
 
     # Update of q(nu_phi):
 
@@ -235,7 +256,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
         for (i in 1:N){
           for (j in 1:p){
 
-            sum_val_ql_prime <-rep(0, dim(C[[i]])[2])
+            sum_val_ql_prime <-rep(0, ncol(C[[i]]))
             for (q_tilde in 1:Q){
               for (l_tilde in 1:L){
                 if ( q_tilde == q && l_tilde == l){
@@ -262,6 +283,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
         mu_q_nu_phi[[q]][[l]]<-Sigma_q_nu_phi_ql%*%sum_term_mu_ql
       }
     }
+
     # Update of q(zeta_iq):
     for (i in 1:N){
       for (q in 1:Q){
@@ -289,9 +311,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
         }
         mu_H_q_phi <- t(mu_V_q_phi)%*%list_cp_C[[i]]%*%mu_V_q_phi + tr_term
         Sigma_q_zeta[[i]][[q]]<- solve(sum_sigma*mu_H_q_phi + inv_Sigma_zeta)
-        #Sigma_q_zeta[[i]][[q]]<- diag(L)
         mu_q_zeta[[i]][[q]] <- as.vector(Sigma_q_zeta[[i]][[q]]%*%(t(mu_V_q_phi)%*%t(C[[i]])%*%sum_mu))
-        #mu_q_zeta[[i]][[q]]<- rep(1, L)
       }
     }
 
@@ -461,12 +481,12 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
     ELBO_iter <- sum(sapply(1:p, function (j) {-(sum(sapply(time_obs, function(x) length (x)))/2)*(log(2*pi)+ mu_q_log_sigsq_eps[j])-
         mu_q_recip_sigsq_eps[j]*( lambda_q_sigsq_eps[j]- mu_q_recip_a_eps[j])} ))#term of Y
     ELBO_iter <- ELBO_iter+ sum(sapply(1:p, function(j){
-      E_q_inv_Sigma_nu_mu <- blkdiag(
+      E_q_inv_Sigma_nu_mu_j <- blkdiag(
         inv_Sigma_beta,
         mu_q_recip_sigsq_mu[j]*diag(K))
       log_det_j_obj <- determinant(Sigma_q_nu_mu[[j]], logarithm = TRUE)
       log_det_j <- log_det_j_obj$modulus * log_det_j_obj$sign
-      -1*log(sigma_zeta)+ 0.5*log_det_j-(K/2)*(mu_q_log_sigsq_mu[j])-0.5*(unlist(t(mu_q_nu_mu[[j]])%*%E_q_inv_Sigma_nu_mu%*%mu_q_nu_mu[[j]])+ tr(E_q_inv_Sigma_nu_mu %*% Sigma_q_nu_mu[[j]])) +K/2 + 1+
+      -1*log(sigma_zeta)+ 0.5*log_det_j-(K/2)*(mu_q_log_sigsq_mu[j])-0.5*(unlist(t(mu_q_nu_mu[[j]])%*%E_q_inv_Sigma_nu_mu_j%*%mu_q_nu_mu[[j]])+ tr(E_q_inv_Sigma_nu_mu_j %*% Sigma_q_nu_mu[[j]])) +K/2 + 1+
         K/2*mu_q_log_sigsq_mu[j] - mu_q_recip_sigsq_mu[j]*(mu_q_recip_a_mu[j]-lambda_q_sigsq_mu[j])-
         0.5*mu_q_log_a_mu[j] -kappa_q_sigsq_mu*log(lambda_q_sigsq_mu[j])-lgamma(0.5)+lgamma(kappa_q_sigsq_mu)+
         (3/2)*mu_q_log_a_mu[j]-mu_q_recip_a_mu[j]*(1/A^2-lambda_q_a_mu[j] )-log(lambda_q_a_mu[j])-lgamma(0.5)+lgamma(1)+ 0.5*log(1/A^2)+
