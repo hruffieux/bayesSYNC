@@ -176,6 +176,9 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
   mu_q_recip_a_phi <- matrix(1, nrow = Q, ncol = L)
 
   list_cp_C <- lapply(1:N, function(i) crossprod(C[[i]]))
+  list_cp_C_Y <- lapply(1:N, function(i) sapply(1:p, function(j) crossprod(C[[i]], Y[[i]][[j]])))
+  list_cp_Y <- sapply(1:p, function(j) sapply(1:N, function(i) crossprod(Y[[i]][[j]])))
+
 
   ELBO <- NULL
   for(i_iter in 1:maxit) {
@@ -219,7 +222,8 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
           rowSums(sapply(1:L, function(l) mu_q_b[j,q]*mu_q_zeta[[i]][[q]][l]*(C[[i]]%*%mu_q_nu_phi[[q]][[l]])))
           }))
 
-        crossprod(C[[i]], Y[[i]][[j]] - sum_val_i_j)
+        # crossprod(C[[i]], Y[[i]][[j]] - sum_val_i_j)
+        list_cp_C_Y[[i]][,j] - crossprod(C[[i]], sum_val_i_j)
 
       }))
 
@@ -231,26 +235,52 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
 
     # Update of q(nu_phi):
 
+    # print(dim((Sigma_qs_normal_b + mu_q_normal_b^2)*mu_q_gamma))
+    sum_vec <- colSums(sweep((Sigma_q_normal_b + mu_q_normal_b^2)*mu_q_gamma, 1, mu_q_recip_sigsq_eps, `*`)) # vector of size Q
+
+    E_q_inv_Sigma_nu_phi <- lapply(1:Q, function(q) lapply(1:L, function(l) blkdiag(inv_Sigma_beta,
+                                                                                    mu_q_recip_sigsq_phi[q,l]*diag(K)
+                                                                                    )
+                                                           )
+                                   )
+
+    E_q_zeta_square <- lapply(1:N, function(i) lapply(1:Q, function(q) diag(Sigma_q_zeta[[i]][[q]]) + mu_q_zeta[[i]][[q]]^2))
+    list_sum <- lapply(1:Q, function(q) lapply(1:L, function(l) Reduce("+", lapply(1:N, function(i) E_q_zeta_square[[i]][[q]][l]*list_cp_C[[i]]))))
+
     Sigma_q_nu_phi <- vector("list", length = Q)
     for ( q in 1:Q){
       Sigma_q_nu_phi[[q]]<- vector ("list", length=L)
+
+      # sum_val_2 <- 0
+      # for (j in 1:p){
+      #   E_q_b_square_jq <- (Sigma_q_normal_b[j,q]+ mu_q_normal_b[j,q]^2)*mu_q_gamma[j,q]
+      #   sum_val_2 <-sum_val_2 + E_q_b_square_jq* mu_q_recip_sigsq_eps[j]
+      # }
+
+      # print(sum_val_2)
       for (l in 1:L){
 
-        E_q_inv_Sigma_nu_phi <- blkdiag(
-          inv_Sigma_beta,
-          mu_q_recip_sigsq_phi[q,l]*diag(K)
-        )
-        sum_val_2 <- 0
-        for (j in 1:p){
-          E_q_b_square_jq <- (Sigma_q_normal_b[j,q]+ mu_q_normal_b[j,q]^2)*mu_q_gamma[j,q]
-          sum_val_2 <-sum_val_2 + E_q_b_square_jq* mu_q_recip_sigsq_eps[j]
-        }
+        # E_q_inv_Sigma_nu_phi_q_l <- blkdiag(
+        #   inv_Sigma_beta,
+        #   mu_q_recip_sigsq_phi[q,l]*diag(K)
+        # )
 
-        sum_val <- 0
-        for (i in 1:N){
-          E_q_zeta_square_iql <- Sigma_q_zeta[[i]][[q]][l,l] + (mu_q_zeta[[i]][[q]][l]^2)
-          sum_val <- sum_val + E_q_zeta_square_iql*list_cp_C[[i]]
-        }
+        # now moved outside the for loop on l (see above)
+        # sum_val_2 <- 0
+        # for (j in 1:p){
+        #   E_q_b_square_jq <- (Sigma_q_normal_b[j,q]+ mu_q_normal_b[j,q]^2)*mu_q_gamma[j,q]
+        #   sum_val_2 <-sum_val_2 + E_q_b_square_jq* mu_q_recip_sigsq_eps[j]
+        # }
+
+        # sum_val <- 0
+        # for (i in 1:N){
+        #   # E_q_zeta_square_iql <- Sigma_q_zeta[[i]][[q]][l,l] + (mu_q_zeta[[i]][[q]][l]^2)
+        #   # sum_val <- sum_val + E_q_zeta_square_iql*list_cp_C[[i]]
+        #   sum_val <- sum_val + E_q_zeta_square[[i]][[q]][l]*list_cp_C[[i]]
+        # }
+        # list_sum <- Reduce("+", lapply(1:N, function(i) E_q_zeta_square[[i]][[q]][l]*list_cp_C[[i]]))
+
+        # print(isTRUE(all.equal(E_q_zeta_square_iq[[i]][[q]][l], E_q_zeta_square_iql)))
 
         sum_term_mu_ql <- 0
         for (i in 1:N){
@@ -274,13 +304,18 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
                 }
               }
             }
-            sum_term_mu_ql <- sum_term_mu_ql+as.vector(mu_q_recip_sigsq_eps[j]*(mu_q_b[j,q]*mu_q_zeta[[i]][[q]][l]*t(C[[i]])%*%(Y[[i]][[j]]-C[[i]]%*% mu_q_nu_mu[[j]])-
+
+            # print(dim(sum_val_ql_prime))
+#            sum_term_mu_ql <- sum_term_mu_ql+as.vector(mu_q_recip_sigsq_eps[j]*(mu_q_b[j,q]*mu_q_zeta[[i]][[q]][l]*t(C[[i]])%*%(Y[[i]][[j]]-C[[i]]%*% mu_q_nu_mu[[j]])-
+#                                                                                  sum_val_ql_prime))
+
+            sum_term_mu_ql <- sum_term_mu_ql+as.vector(mu_q_recip_sigsq_eps[j]*(mu_q_b[j,q]*mu_q_zeta[[i]][[q]][l]*(list_cp_C_Y[[i]][,j] - list_cp_C[[i]]%*% mu_q_nu_mu[[j]])-
                                                                                   sum_val_ql_prime))
           }
         }
-        Sigma_q_nu_phi_ql <- solve(sum_val_2* sum_val+ E_q_inv_Sigma_nu_phi)
-        Sigma_q_nu_phi[[q]][[l]] <- Sigma_q_nu_phi_ql
-        mu_q_nu_phi[[q]][[l]]<-Sigma_q_nu_phi_ql%*%sum_term_mu_ql
+
+        Sigma_q_nu_phi[[q]][[l]] <- solve(sum_vec[q] * list_sum[[q]][[l]] + E_q_inv_Sigma_nu_phi[[q]][[l]])
+        mu_q_nu_phi[[q]][[l]]<-Sigma_q_nu_phi[[q]][[l]]%*%sum_term_mu_ql
       }
     }
 
@@ -294,11 +329,11 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
           h_i_nu <- rep(0, K+2)
           for ( q_tilde in 1:Q){
             if (q_tilde != q){
-              mu_V_q_tilde_phi <- matrix(NA,nrow = K+2, ncol = L)
+              mu_V_q_tilde_phi <- matrix(NA, nrow = K+2, ncol = L)
               for (l in 1:L){
                 mu_V_q_tilde_phi[,l]<- mu_q_nu_phi[[q_tilde]][[l]]
               }
-              h_i_nu <- h_i_nu + mu_q_b[j, q_tilde]*mu_V_q_tilde_phi%*%mu_q_zeta[[i]][[q_tilde]]
+              h_i_nu <- h_i_nu + mu_q_b[j, q_tilde] * mu_V_q_tilde_phi%*%mu_q_zeta[[i]][[q_tilde]]
             }
           }
           sum_mu <- sum_mu + mu_q_b[j,q]*mu_q_recip_sigsq_eps[j]*(Y[[i]][[j]]-C[[i]]%*% mu_q_nu_mu[[j]]- C[[i]]%*%h_i_nu)
@@ -307,7 +342,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
         mu_V_q_phi <- matrix(NA,nrow = K+2, ncol = L)
         for (l in 1:L){
           mu_V_q_phi[,l]<- mu_q_nu_phi[[q]][[l]]
-          tr_term[l,l] <- tr( list_cp_C[[i]]%*% Sigma_q_nu_phi[[q]][[l]])
+          tr_term[l,l] <- tr(list_cp_C[[i]]%*% Sigma_q_nu_phi[[q]][[l]])
         }
         mu_H_q_phi <- t(mu_V_q_phi)%*%list_cp_C[[i]]%*%mu_V_q_phi + tr_term
         Sigma_q_zeta[[i]][[q]]<- solve(sum_sigma*mu_H_q_phi + inv_Sigma_zeta)
@@ -335,17 +370,17 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
       sum_val_mu <- 0
       sum_val_phi <-0
       for (i in 1:N){
-        sum_val_y <- sum_val_y+ crossprod(Y[[i]][[j]])-2*t(mu_q_nu_mu[[j]])%*%t(C[[i]])%*%Y[[i]][[j]]
-        sum_val_mu <- sum_val_mu+ t(mu_q_nu_mu[[j]])%*%list_cp_C[[i]]%*%mu_q_nu_mu[[j]]+ tr (list_cp_C[[i]]%*% Sigma_q_nu_mu[[j]])
+        sum_val_y <- sum_val_y+ list_cp_Y[i,j]-2*t(mu_q_nu_mu[[j]])%*%list_cp_C_Y[[i]][,j]
+        sum_val_mu <- sum_val_mu+ t(mu_q_nu_mu[[j]])%*%list_cp_C[[i]]%*%mu_q_nu_mu[[j]]+ tr(list_cp_C[[i]]%*% Sigma_q_nu_mu[[j]])
         for (q in 1:Q){
           mu_V_q_phi <- matrix(NA,nrow = K+2, ncol = L)
           tr_term <- diag(L)
           for (l in 1:L){
             mu_V_q_phi[,l]<- mu_q_nu_phi[[q]][[l]]
-            tr_term[l,l] <- tr( list_cp_C[[i]]%*% Sigma_q_nu_phi[[q]][[l]])
+            tr_term[l,l] <- tr(list_cp_C[[i]]%*% Sigma_q_nu_phi[[q]][[l]])
           }
           mu_H_q_phi <- t(mu_V_q_phi)%*%list_cp_C[[i]]%*%mu_V_q_phi + tr_term
-          sum_val_y <- sum_val_y-2*mu_q_b[j,q]*t(mu_q_zeta[[i]][[q]])%*%t(mu_V_q_phi)%*%t(C[[i]])%*%Y[[i]][[j]]
+          sum_val_y <- sum_val_y-2*mu_q_b[j,q]*t(mu_q_zeta[[i]][[q]])%*%t(mu_V_q_phi)%*%list_cp_C_Y[[i]][,j]
           sum_val_mu <- sum_val_mu+2*mu_q_b[j,q]*t(mu_q_zeta[[i]][[q]])%*%t(mu_V_q_phi)%*%list_cp_C[[i]]%*%mu_q_nu_mu[[j]]
           sum_val_phi<- sum_val_phi + (mu_q_normal_b[j,q]^2+Sigma_q_normal_b[j,q])*mu_q_gamma[j,q]*
             tr(mu_H_q_phi%*%(Sigma_q_zeta[[i]][[q]]+mu_q_zeta[[i]][[q]]%*%t(mu_q_zeta[[i]][[q]])))
@@ -448,7 +483,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
           trace_term <- diag(L)
           for (l in 1:L){
             mu_V_q_phi[,l]<- mu_q_nu_phi[[q]][[l]]
-            trace_term[l,l]<- tr( list_cp_C[[i]]%*% Sigma_q_nu_phi[[q]][[l]])
+            trace_term[l,l]<- tr(list_cp_C[[i]]%*% Sigma_q_nu_phi[[q]][[l]])
           }
           mu_H_q_phi <- t(mu_V_q_phi)%*%list_cp_C[[i]]%*%mu_V_q_phi+ trace_term
           sum_sigma<-sum_sigma+tr(mu_H_q_phi%*%(Sigma_q_zeta[[i]][[q]]+mu_q_zeta[[i]][[q]]%*%t(mu_q_zeta[[i]][[q]])))
@@ -463,7 +498,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
             }
           }
           sum_mu <- sum_mu +t(mu_q_zeta[[i]][[q]])%*%
-            t(mu_V_q_phi)%*%t(C[[i]])%*%(Y[[i]][[j]]-C[[i]]%*%mu_q_nu_mu[[j]]-C[[i]]%*%sum_mu_tilde)
+            t(mu_V_q_phi)%*%(list_cp_C_Y[[i]][,j]-list_cp_C[[i]]%*%mu_q_nu_mu[[j]]-list_cp_C[[i]]%*%sum_mu_tilde)
         }
         Sigma_q_normal_b[j,q]<- 1/(mu_q_recip_sigsq_eps[j]*sum_sigma+ mu_q_alpha[q])
         mu_q_normal_b[j,q]<- Sigma_q_normal_b[j,q]*mu_q_recip_sigsq_eps[j]*sum_mu
@@ -514,14 +549,14 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
     }))# q_phi, sigsq_phi
     ELBO_iter<- ELBO_iter+ sum(sapply(1:Q, function(q){
       sum(sapply(1:L, function(l){
-        E_q_inv_Sigma_nu_phi <- blkdiag(
+        E_q_inv_Sigma_nu_phi_q_l <- blkdiag(
           inv_Sigma_beta,
           mu_q_recip_sigsq_phi[q,l]*diag(K)
         )
         log_det_q_l_obj <- determinant(Sigma_q_nu_phi[[q]][[l]], logarithm = TRUE)
         log_det_q_l <- log_det_q_l_obj$modulus * log_det_q_l_obj$sign
         -1*log(sigma_zeta)+ 0.5*log_det_q_l-(K/2)*(mu_q_log_sigsq_phi[q,l])-
-          0.5*(unlist((t(mu_q_nu_phi[[q]][[l]])%*%E_q_inv_Sigma_nu_phi%*%mu_q_nu_phi[[q]][[l]])+ tr(E_q_inv_Sigma_nu_phi%*% Sigma_q_nu_phi[[q]][[l]])))+
+          0.5*(unlist((t(mu_q_nu_phi[[q]][[l]])%*%E_q_inv_Sigma_nu_phi_q_l%*%mu_q_nu_phi[[q]][[l]])+ tr(E_q_inv_Sigma_nu_phi_q_l%*% Sigma_q_nu_phi[[q]][[l]])))+
           K/2 + 1 #mu_phi
       }))
     }))
