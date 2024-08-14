@@ -166,7 +166,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
   kappa_q_a_mu <- kappa_q_a_eps <- kappa_q_a_phi <- 1
   kappa_q_sigsq_eps <- sum(sapply(time_obs, function(x) length (x)))/2 + 0.5
 
-  mu_q_normal_b <- matrix(rnorm(p*Q, 0,1), nrow = p, ncol = Q)
+  mu_q_normal_b <- matrix(rnorm(p*Q, 0, 1), nrow = p, ncol = Q)
   mu_q_b <- mu_q_normal_b
   Sigma_q_normal_b <- mu_q_gamma <- matrix(1, nrow= p, ncol= Q)
 
@@ -200,10 +200,6 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
 
       sum_term_mu_j <- rowSums(sapply(1:N, function(i) {
 
-        # sum_val_i_j <- rowSums(sapply(1:Q, function(q) {
-        #   rowSums(mu_q_b[j,q]*sweep(C[[i]]%*%mu_q_nu_phi[[q]], 2, mu_q_zeta[[i]][[q]], `*`))
-        # }))
-
         sum_val_i_j <- rowSums(sapply(1:Q, function(q) {
           rowSums(mu_q_b[j,q]*sweep(C[[i]]%*%mu_q_nu_phi[[q]], 2, mu_q_zeta[[q]][i,], `*`))
         }))
@@ -212,7 +208,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
 
       }))
 
-      as.vector(Sigma_q_nu_mu[[j]] %*%(mu_q_recip_sigsq_eps[j]*sum_term_mu_j))
+      as.vector(Sigma_q_nu_mu[[j]] %*% (mu_q_recip_sigsq_eps[j]*sum_term_mu_j))
 
     }, mc.cores = n_cpus)
 
@@ -223,71 +219,182 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
     sum_vec <- colSums(sweep((Sigma_q_normal_b + mu_q_normal_b^2)*mu_q_gamma, 1, mu_q_recip_sigsq_eps, `*`)) # vector of size Q
 
     E_q_inv_Sigma_nu_phi <- lapply(1:Q, function(q) lapply(1:L, function(l) blkdiag(inv_Sigma_beta,
-                                                                                    mu_q_recip_sigsq_phi[q,l]*diag(K)
-                                                                                    )
-                                                           )
-                                   )
+                                                                                    mu_q_recip_sigsq_phi[q,l]*diag(K))))
 
-    # E_q_zeta_square <- lapply(1:N, function(i) lapply(1:Q, function(q) diag(Sigma_q_zeta[[i]][[q]]) + mu_q_zeta[[i]][[q]]^2))
     E_q_zeta_square <- lapply(1:N, function(i) lapply(1:Q, function(q) diag(Sigma_q_zeta[[i]][[q]]) + mu_q_zeta[[q]][i,]^2))
     list_sum <- lapply(1:Q, function(q) lapply(1:L, function(l) Reduce("+", lapply(1:N, function(i) E_q_zeta_square[[i]][[q]][l]*list_cp_C[[i]]))))
 
-    Sigma_q_nu_phi <- vector("list", length = Q)
-    for ( q in 1:Q){
-      Sigma_q_nu_phi[[q]]<- vector ("list", length=L)
+#     Sigma_q_nu_phi <- vector("list", length = Q)
+#     for ( q in 1:Q){
+#       Sigma_q_nu_phi[[q]]<- vector ("list", length=L)
+#
+#       for (l in 1:L){
+#
+#         sum_term_mu_ql <- 0
+#         for (i in 1:N){
+#           for (j in 1:p){
+#
+#
+#             # version C: mistake somewhere.
+#
+#             # A_ijql <- mu_q_b[j,q]*mu_q_zeta[[q]][i,l]*(list_cp_C_Y[[i]][,j] - list_cp_C[[i]]%*% mu_q_nu_mu[[j]])
+#             #
+#             # sum_sum_Cijqqprimellprime <- Reduce("+", lapply(1:L, function(l_tilde) Reduce("+", lapply(1:Q, function(q_tilde) {
+#             #   mu_q_b[j,q]*mu_q_b[j,q_tilde]*
+#             #     mu_q_zeta[[q_tilde]][i,l_tilde]*mu_q_zeta[[q]][i,l]*
+#             #     list_cp_C[[i]]%*% mu_q_nu_phi[[q_tilde]][,l_tilde]
+#             # }))))
+#             #
+#             # Cijqqprimellprime_corr_q_prime <- Reduce("+", lapply(1:L, function(l_tilde) (mu_q_normal_b[j,q]^2 * (mu_q_gamma[j,q]^2 - mu_q_gamma[j,q]) - Sigma_q_normal_b[j,q]*mu_q_gamma[j,q]) *
+#             #   (mu_q_zeta[[q]][i,l_tilde]*mu_q_zeta[[q]][i,l] - Sigma_q_zeta[[i]][[q]][l,l_tilde]) * (list_cp_C[[i]]%*% mu_q_nu_phi[[q]][,l_tilde])))
+#             #
+#             # Cijqqprimellprime_corr_l_prime <- (mu_q_normal_b[j,q]^2 + Sigma_q_normal_b[j,q]) * mu_q_gamma[j,q] *
+#             #                                                        (mu_q_zeta[[q]][i,l]^2 + Sigma_q_zeta[[i]][[q]][l,l]) * list_cp_C[[i]]%*% mu_q_nu_phi[[q]][,l]
+#             #
+#             # tot_ijql <- as.vector(mu_q_recip_sigsq_eps[j]*(A_ijql - sum_sum_Cijqqprimellprime + Cijqqprimellprime_corr_q_prime + Cijqqprimellprime_corr_l_prime))
+#
+#
+#
+#             # # version B: too slow
+#             #
+#             # A_ijql <- mu_q_b[j,q]*mu_q_zeta[[q]][i,l]*(list_cp_C_Y[[i]][,j] - list_cp_C[[i]]%*% mu_q_nu_mu[[j]])
+#             #
+#             # sum_Bijqllprime <- rowSums(sapply(1:L, function(l_tilde) (mu_q_normal_b[j,q]^2+Sigma_q_normal_b[j,q])*mu_q_gamma[j,q] *
+#             #   (mu_q_zeta[[q]][i,l_tilde]*mu_q_zeta[[q]][i,l]+ Sigma_q_zeta[[i]][[q]][l,l_tilde]) * (list_cp_C[[i]]%*% mu_q_nu_phi[[q]][,l_tilde])))
+#             #
+#             # sum_Bijqll <- (mu_q_normal_b[j,q]^2+Sigma_q_normal_b[j,q])*mu_q_gamma[j,q] *
+#             #   (mu_q_zeta[[q]][i,l]^2 + Sigma_q_zeta[[i]][[q]][l,l]) * (list_cp_C[[i]]%*% mu_q_nu_phi[[q]][,l])
+#             #
+#             # sum_sum_Cijqqprimellprime <- Reduce("+", lapply(1:L, function(l_tilde) Reduce("+", lapply(1:Q, function(q_tilde) {
+#             #   mu_q_b[j,q]*mu_q_b[j,q_tilde]*
+#             #     mu_q_zeta[[q_tilde]][i,l_tilde]*mu_q_zeta[[q]][i,l]*
+#             #     list_cp_C[[i]]%*% mu_q_nu_phi[[q_tilde]][,l_tilde]
+#             # }))))
+#             #
+#             # sum_Cijqqllprime <- Reduce("+", lapply(1:L, function(l_tilde)
+#             #   mu_q_b[j,q]^2 * mu_q_zeta[[q]][i,l_tilde]*mu_q_zeta[[q]][i,l]*
+#             #     list_cp_C[[i]]%*% mu_q_nu_phi[[q]][,l_tilde]))
+#             #
+#             # tot_ijql <- as.vector(mu_q_recip_sigsq_eps[j]*(A_ijql - sum_Bijqllprime + sum_Bijqll - sum_sum_Cijqqprimellprime + sum_Cijqqllprime))
+#
+#
+#             # version D:
+# #
+# #             A_ijql <- mu_q_b[j,q]*mu_q_zeta[[q]][i,l]*(list_cp_C_Y[[i]][,j] - list_cp_C[[i]] %*% mu_q_nu_mu[[j]])
+# #
+# #             sum_sub <- rowSums(sapply(1:L, function(l_tilde) {
+# #
+# #               (mu_q_normal_b[j,q]^2+Sigma_q_normal_b[j,q])*mu_q_gamma[j,q] *
+# #                 (mu_q_zeta[[q]][i,l_tilde]*mu_q_zeta[[q]][i,l]+ Sigma_q_zeta[[i]][[q]][l,l_tilde]) *
+# #                 (list_cp_C[[i]]%*% mu_q_nu_phi[[q]][,l_tilde]) +
+# #                 rowSums(sapply(1:Q, function(q_tilde) {
+# #               mu_q_b[j,q]*mu_q_b[j,q_tilde]*
+# #                 mu_q_zeta[[q_tilde]][i,l_tilde]*mu_q_zeta[[q]][i,l]*
+# #                 list_cp_C[[i]]%*% mu_q_nu_phi[[q_tilde]][,l_tilde]
+# #             })) -
+# #             mu_q_b[j,q]^2 * mu_q_zeta[[q]][i,l_tilde]*mu_q_zeta[[q]][i,l]*
+# #               list_cp_C[[i]]%*% mu_q_nu_phi[[q]][,l_tilde] # sum_Bijqllprime + sum_sum_Cijqqprimellprime - sum_Cijqqllprime
+# #             }))
+# #
+# #             sum_Bijqll <- (mu_q_normal_b[j,q]^2+Sigma_q_normal_b[j,q])*mu_q_gamma[j,q] *
+# #               (mu_q_zeta[[q]][i,l]^2 + Sigma_q_zeta[[i]][[q]][l,l]) * (list_cp_C[[i]]%*% mu_q_nu_phi[[q]][,l])
+# #
+# #             tot_ijql <- as.vector(mu_q_recip_sigsq_eps[j]*(A_ijql - sum_sub + sum_Bijqll ))
+#
+#
+#
+#             # ---
+#             sum_val_ql_prime <- rep(0, K+2)
+#             for (q_tilde in 1:Q){
+#               for (l_tilde in 1:L){
+#                 if ( q_tilde == q && l_tilde == l){
+#                   sum_val_ql_prime <- sum_val_ql_prime
+#                 } else {
+#                   if (q_tilde ==q){
+#
+#                     term <- (mu_q_normal_b[j,q]^2+Sigma_q_normal_b[j,q])*mu_q_gamma[j,q]*
+#                       (mu_q_zeta[[q]][i,l_tilde]*mu_q_zeta[[q]][i,l]+ Sigma_q_zeta[[i]][[q]][l,l_tilde])*
+#                       (list_cp_C[[i]]%*% mu_q_nu_phi[[q]][,l_tilde])
+#
+#                     sum_val_ql_prime <- sum_val_ql_prime+ term
+#
+#                   } else {
+#
+#                     term <- mu_q_b[j,q]*mu_q_b[j,q_tilde]*
+#                       mu_q_zeta[[q_tilde]][i,l_tilde]*mu_q_zeta[[q]][i,l]*
+#                       list_cp_C[[i]]%*% mu_q_nu_phi[[q_tilde]][,l_tilde]
+#
+#                     sum_val_ql_prime <- sum_val_ql_prime+ term
+#
+#                   }
+#                 }
+#               }
+#             }
+#
+#             tot_ijql <- as.vector(mu_q_recip_sigsq_eps[j]*(mu_q_b[j,q]*mu_q_zeta[[q]][i,l]*(list_cp_C_Y[[i]][,j] - list_cp_C[[i]]%*% mu_q_nu_mu[[j]])-
+#                                                             sum_val_ql_prime))
+#
+#             # ----
+#
+#             sum_term_mu_ql <- sum_term_mu_ql+ tot_ijql
+#           }
+#         }
+#
+#         Sigma_q_nu_phi[[q]][[l]] <- solve(sum_vec[q] * list_sum[[q]][[l]] + E_q_inv_Sigma_nu_phi[[q]][[l]])
+#         mu_q_nu_phi[[q]][,l]<-Sigma_q_nu_phi[[q]][[l]]%*%sum_term_mu_ql
+#       }
+#     }
 
-      for (l in 1:L){
 
-        sum_term_mu_ql <- 0
-        for (i in 1:N){
-          for (j in 1:p){
 
-            sum_val_ql_prime <- rep(0, ncol(C[[i]]))
-            for (q_tilde in 1:Q){
-              for (l_tilde in 1:L){
-                if ( q_tilde == q && l_tilde == l){
-                  sum_val_ql_prime<- sum_val_ql_prime
-                } else {
-                  if (q_tilde ==q){
+    for (q in 1:Q) {
+      for (l in 1:L) {
 
-                    # term <- (mu_q_normal_b[j,q]^2+Sigma_q_normal_b[j,q])*mu_q_gamma[j,q]*
-                    #   (mu_q_zeta[[i]][[q_tilde]][l_tilde]*mu_q_zeta[[i]][[q]][l]+ Sigma_q_zeta[[i]][[q]][l,l_tilde])*
-                    #   (list_cp_C[[i]]%*% mu_q_nu_phi[[q_tilde]][,l_tilde])
+        sum_term_mu_ql <- Reduce("+", parallel::mclapply(1:N, function(i) {
 
-                    term <- (mu_q_normal_b[j,q]^2+Sigma_q_normal_b[j,q])*mu_q_gamma[j,q]*
-                      (mu_q_zeta[[q_tilde]][i,l_tilde]*mu_q_zeta[[q]][i,l]+ Sigma_q_zeta[[i]][[q]][l,l_tilde])*
-                      (list_cp_C[[i]]%*% mu_q_nu_phi[[q_tilde]][,l_tilde])
+          tmp_term_qil <- vector("list", length = Q)
 
-                    sum_val_ql_prime <- sum_val_ql_prime+ term
-                  } else {
-                    # term <- mu_q_b[j,q]*mu_q_b[j,q_tilde]*
-                    #   mu_q_zeta[[i]][[q_tilde]][l_tilde]*mu_q_zeta[[i]][[q]][l]*
-                    #   (list_cp_C[[i]]%*% mu_q_nu_phi[[q_tilde]][,l_tilde])
+          for (q_tilde in setdiff(1:Q, q)) {
 
-                    term <- mu_q_b[j,q]*mu_q_b[j,q_tilde]*
-                      mu_q_zeta[[q_tilde]][i,l_tilde]*mu_q_zeta[[q]][i,l]*
-                      (list_cp_C[[i]]%*% mu_q_nu_phi[[q_tilde]][,l_tilde])
+            # avoid recomputing for each j
+            tmp_term_qil[[q_tilde]] <- rowSums(sapply(1:L, function(l_tilde) { mu_q_zeta[[q_tilde]][i,l_tilde] * mu_q_zeta[[q]][i,l] *
+                list_cp_C[[i]] %*% mu_q_nu_phi[[q_tilde]][,l_tilde]
+            }))
 
-                    sum_val_ql_prime <- sum_val_ql_prime+ term
+            # tmp_term_qil[[q_tilde]] <- rowSums(sapply(1:p, function(j) mu_q_recip_sigsq_eps[j] * mu_q_b[j,q] * mu_q_b[j,q_tilde] * tmp_term_qil[[q_tilde]]))
+            tmp_term_qil[[q_tilde]] <- tmp_term_qil[[q_tilde]] * sum(mu_q_recip_sigsq_eps * mu_q_b[, q] * mu_q_b[, q_tilde])
 
-                  }
-                }
-              }
-            }
-
-            # term_ql <- as.vector(mu_q_recip_sigsq_eps[j]*(mu_q_b[j,q]*mu_q_zeta[[i]][[q]][l]*(list_cp_C_Y[[i]][,j] - list_cp_C[[i]]%*% mu_q_nu_mu[[j]])-
-            #                                                 sum_val_ql_prime))
-
-            term_ql <- as.vector(mu_q_recip_sigsq_eps[j]*(mu_q_b[j,q]*mu_q_zeta[[q]][i,l]*(list_cp_C_Y[[i]][,j] - list_cp_C[[i]]%*% mu_q_nu_mu[[j]])-
-                                                            sum_val_ql_prime))
-            sum_term_mu_ql <- sum_term_mu_ql+ term_ql
           }
-        }
 
-        Sigma_q_nu_phi[[q]][[l]] <- solve(sum_vec[q] * list_sum[[q]][[l]] + E_q_inv_Sigma_nu_phi[[q]][[l]])
-        mu_q_nu_phi[[q]][,l]<-Sigma_q_nu_phi[[q]][[l]]%*%sum_term_mu_ql
-      }
-    }
+          # avoid recomputing for each j
+          tmp_term_qil[[q]] <- rowSums(sapply(setdiff(1:L, l), function(l_tilde) { (mu_q_zeta[[q]][i,l_tilde]*mu_q_zeta[[q]][i,l] + Sigma_q_zeta[[i]][[q]][l,l_tilde])*
+              list_cp_C[[i]] %*% mu_q_nu_phi[[q]][,l_tilde]
+          }))
+
+          # tmp_term_qil[[q]] <- rowSums(sapply(1:p, function(j) mu_q_recip_sigsq_eps[j] * (mu_q_normal_b[j,q]^2 + Sigma_q_normal_b[j,q]) * mu_q_gamma[j,q] * tmp_term_qil[[q]]))
+
+          tmp_term_qil[[q]] <- tmp_term_qil[[q]] * colSums(crossprod(mu_q_recip_sigsq_eps * (mu_q_normal_b[, q]^2 + Sigma_q_normal_b[, q]), mu_q_gamma[, q]))
+
+          # print(length(tmp_term_qil[[q]]))
+          # tmp_term_qil[[q]] <- tmp_term_qil[[q]] * (mu_q_recip_sigsq_eps * (mu_q_normal_b[,q]^2 + Sigma_q_normal_b[,q]) %*% mu_q_gamma[,q])
+
+          # print(isTRUE(all.equal(rowSums(sapply(1:p, function(j) mu_q_recip_sigsq_eps[j] * (mu_q_normal_b[j,q]^2 + Sigma_q_normal_b[j,q]) * mu_q_gamma[j,q] * tmp_term_qil[[q]])),
+          #                        tmp_term_qil[[q]] * colSums(crossprod(mu_q_recip_sigsq_eps * (mu_q_normal_b[, q]^2 + Sigma_q_normal_b[, q]), mu_q_gamma[, q])))))
+
+          list_term_qil_2 <- Reduce("+", tmp_term_qil)
+
+          list_term_qil_1 <- rowSums(sapply(1:p, function(j) mu_q_recip_sigsq_eps[j]*(mu_q_b[j,q]*mu_q_zeta[[q]][i,l]*(list_cp_C_Y[[i]][,j] - list_cp_C[[i]]%*% mu_q_nu_mu[[j]]))))
+
+          as.vector(list_term_qil_1 -  list_term_qil_2)
+        }, mc.cores = n_cpus))
+
+      Sigma_q_nu_phi[[q]][[l]] <- solve(sum_vec[q] * list_sum[[q]][[l]] + E_q_inv_Sigma_nu_phi[[q]][[l]])
+      mu_q_nu_phi[[q]][,l] <- Sigma_q_nu_phi[[q]][[l]]%*%sum_term_mu_ql
+     }
+   }
+
+
+
 
     # Update of q(zeta_iq):
     for (i in 1:N){
