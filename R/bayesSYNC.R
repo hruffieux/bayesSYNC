@@ -144,18 +144,14 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
   A <- list_hyper$A
   c_0 <- list_hyper$c_0
   d_0 <- list_hyper$d_0
-  alpha_0 <- list_hyper$alpha_0
-  beta_0 <- list_hyper$beta_0
+  # alpha_0 <- list_hyper$alpha_0 # TODO: remove as alpha is fixed to one
+  # beta_0 <- list_hyper$beta_0 # TODO: remove as alpha is fixed to one
 
   T_vec <- sapply(Y, length)
 
   inv_Sigma_zeta <- 1/sigma_zeta^2*diag(L)
   inv_Sigma_beta <- solve(Sigma_beta)
 
-  # mu_q_zeta <- vector("list", length = N)
-  # Sigma_q_zeta <- vector("list", length = N)
-
-  # mu_q_zeta <- lapply(1:N, function(i) lapply(1:Q, function(q) return(rep(0.5, L))))
   mu_q_zeta <- lapply(1:Q, function(q) matrix(0.5, nrow = N, ncol = L))
   Sigma_q_zeta <- lapply(1:Q, function(q) lapply(1:N, function(i) diag(L)))
 
@@ -170,17 +166,17 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
   mu_q_b <- mu_q_normal_b
   Sigma_q_normal_b <- mu_q_gamma <- matrix(1, nrow= p, ncol= Q)
 
-  mu_q_alpha <- rep(1, Q)
+  # mu_q_alpha <- rep(1, Q)
 
-  # mu_q_nu_phi <- lapply(1:Q, function(q) lapply(1:L, function(l) rep(0.5, K+2)))
   mu_q_nu_phi <- lapply(1:Q, function(q) matrix(0.5, nrow = K+2, ncol = L))
-  mu_q_recip_a_mu <- mu_q_recip_a_eps <- rep(1, p) #<- mu_q_recip_a_mu_2 <- mu_q_recip_a_eps_2 <- rep(1, p)
+  mu_q_recip_a_mu <- mu_q_recip_a_eps <- rep(1, p)
   mu_q_recip_a_phi <- matrix(1, nrow = Q, ncol = L)
 
   list_cp_C <- lapply(1:N, function(i) crossprod(C[[i]]))
   list_cp_C_Y <- lapply(1:N, function(i) sapply(1:p, function(j) crossprod(C[[i]], Y[[i]][[j]])))
   list_cp_Y <- sapply(1:p, function(j) sapply(1:N, function(i) crossprod(Y[[i]][[j]])))
 
+  term_b <- (Sigma_q_normal_b + mu_q_normal_b^2)*mu_q_gamma
 
   ELBO <- NULL
   for(i_iter in 1:maxit) {
@@ -216,7 +212,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
 
     # Update of q(nu_phi):
 
-    sum_vec <- colSums(sweep((Sigma_q_normal_b + mu_q_normal_b^2)*mu_q_gamma, 1, mu_q_recip_sigsq_eps, `*`)) # vector of size Q
+    sum_vec <- colSums(sweep(term_b, 1, mu_q_recip_sigsq_eps, `*`)) # vector of size Q
 
     E_q_inv_Sigma_nu_phi <- parallel::mclapply(1:Q, function(q) lapply(1:L, function(l) blkdiag(inv_Sigma_beta,
                                                                                     mu_q_recip_sigsq_phi[q,l]*diag(K))), mc.cores = n_cpus)
@@ -227,7 +223,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
     mu_H_q_phi <- vector("list", length = Q)
     for (q in 1:Q) { # could be run in parallel
 
-      term_q <- mu_q_recip_sigsq_eps * (mu_q_normal_b[, q]^2 + Sigma_q_normal_b[, q]) * mu_q_gamma[,q]
+      term_q <- mu_q_recip_sigsq_eps * term_b[,q]
       sum_sigma <- sum(term_q)
 
       for (l in 1:L) {
@@ -287,199 +283,121 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
 
     }
 
+
+    lambda_q_sigsq_eps <- mu_q_recip_a_eps + sapply(1:p, function(j) {
+      0.5 * sum(sapply(1:N, function(i) {
+        list_cp_Y[i,j]-
+          2*crossprod(mu_q_nu_mu[[j]] +
+                        Reduce("+",
+                               lapply(1:Q, function(q) mu_q_b[j,q]*mu_q_nu_phi[[q]] %*% mu_q_zeta[[q]][i,])), list_cp_C_Y[[i]][,j]) +
+          crossprod(mu_q_nu_mu[[j]], list_cp_C[[i]]%*%mu_q_nu_mu[[j]]) + tr(crossprod(list_cp_C[[i]], Sigma_q_nu_mu[[j]])) +
+          2*crossprod(Reduce("+",
+                             lapply(1:Q, function(q) mu_q_b[j,q]*mu_q_nu_phi[[q]] %*% mu_q_zeta[[q]][i,])), list_cp_C[[i]] %*% mu_q_nu_mu[[j]]) +
+          Reduce("+",
+                 lapply(1:Q, function(q) {
+
+                   sum_val_phi<- term_b[j, q]*
+          tr(mu_H_q_phi[[q]][[i]]%*%(Sigma_q_zeta[[q]][[i]]+tcrossprod(mu_q_zeta[[q]][i,])))
+
+                   sum_val_phi_q_tilde <- Reduce("+", lapply(setdiff(1:Q, q), function(q_tilde) {
+                   mu_q_b[j,q_tilde]*C[[i]]%*%mu_q_nu_phi[[q_tilde]]%*%mu_q_zeta[[q_tilde]][i,]
+
+                   }))
+
+                   sum_val_phi + mu_q_b[j,q]*t(mu_q_zeta[[q]][i,])%*%t(mu_q_nu_phi[[q]])%*%t(C[[i]])%*%sum_val_phi_q_tilde
+
+                   }))
+      }))
+    })
+
+
+    mu_q_recip_sigsq_eps <- kappa_q_sigsq_eps/lambda_q_sigsq_eps
+    mu_q_log_sigsq_eps <- log(lambda_q_sigsq_eps)-digamma(kappa_q_sigsq_eps)
+
+    lambda_q_a_eps <- mu_q_recip_sigsq_eps + 1/A^2
+    mu_q_recip_a_eps <- kappa_q_a_eps/lambda_q_a_eps
+    mu_q_log_a_eps <- log(lambda_q_a_eps)-digamma(kappa_q_a_eps)
+
+    lambda_q_sigsq_mu <- sapply(1:p, function(j) {
+      mu_q_u_mu_j <- mu_q_nu_mu[[j]][-c(1:2)]
+      Sigma_q_u_mu_j <- Sigma_q_nu_mu[[j]][-c(1:2), -c(1:2)]
+      0.5*(crossprod(mu_q_u_mu_j)+tr(Sigma_q_u_mu_j))+mu_q_recip_a_mu[j]
+    })
+
+    mu_q_recip_sigsq_mu <- kappa_q_sigsq_mu/lambda_q_sigsq_mu
+    mu_q_log_sigsq_mu <- log(lambda_q_sigsq_mu) - digamma(kappa_q_sigsq_mu)
+
+    lambda_q_a_mu <- mu_q_recip_sigsq_mu + 1/A^2
+    mu_q_recip_a_mu <- kappa_q_a_mu/lambda_q_a_mu
+    mu_q_log_a_mu <- log(lambda_q_a_mu)- digamma(kappa_q_a_mu)
+
+
+    lambda_q_sigsq_phi <- mu_q_recip_a_phi + 0.5*sapply(1:L, function(l) sapply(1:Q, function(q) tr(Sigma_q_nu_phi[[q]][[l]][-c(1:2), -c(1:2)])+crossprod(mu_q_nu_phi[[q]][-c(1:2),l])))
+
+    mu_q_recip_sigsq_phi <- kappa_q_sigsq_phi/ lambda_q_sigsq_phi
+    mu_q_log_sigsq_phi <- log(lambda_q_sigsq_phi)-digamma(kappa_q_sigsq_phi)
+
+    lambda_q_a_phi <- mu_q_recip_sigsq_phi + 1/A^2
+    mu_q_recip_a_phi <- kappa_q_a_phi/lambda_q_a_phi
+    mu_q_log_a_phi <- log(lambda_q_a_phi)- digamma(kappa_q_a_phi)
+
+
     new_version <- T
+
     if (new_version) {
+      cs_mu_q_gamma <- colSums(mu_q_gamma)
 
-    # mu_q_recip_a_eps <- mu_q_recip_a_mu <- rep(1, p) # no should not be fixed
+      c_1_omega <- c_0 + cs_mu_q_gamma
+      d_1_omega <- d_0 + p - cs_mu_q_gamma
 
-      lambda_q_sigsq_eps <- mu_q_recip_a_eps + sapply(1:p, function(j) {
-        0.5 * sum(sapply(1:N, function(i) {
-          list_cp_Y[i,j]-
-            2*crossprod(mu_q_nu_mu[[j]] +
-                          Reduce("+",
-                                 lapply(1:Q, function(q) mu_q_b[j,q]*mu_q_nu_phi[[q]] %*% mu_q_zeta[[q]][i,])), list_cp_C_Y[[i]][,j]) +
-            crossprod(mu_q_nu_mu[[j]], list_cp_C[[i]]%*%mu_q_nu_mu[[j]]) + tr(crossprod(list_cp_C[[i]], Sigma_q_nu_mu[[j]])) +
-            2*crossprod(Reduce("+",
-                               lapply(1:Q, function(q) mu_q_b[j,q]*mu_q_nu_phi[[q]] %*% mu_q_zeta[[q]][i,])), list_cp_C[[i]] %*% mu_q_nu_mu[[j]]) +
-            Reduce("+",
-                   lapply(1:Q, function(q) {
+      dig <- digamma(c_0 + d_0 + p)
+      mu_q_log_omega <- digamma(c_1_omega) - dig
+      mu_q_log_1_omega <- digamma(d_1_omega) - dig
 
-                     sum_val_phi<- (mu_q_normal_b[j,q]^2+Sigma_q_normal_b[j,q])*mu_q_gamma[j,q]*
-            tr(mu_H_q_phi[[q]][[i]]%*%(Sigma_q_zeta[[q]][[i]]+tcrossprod(mu_q_zeta[[q]][i,])))
+      # alpha was the precision of the slab on the B entries, now this precision is fixed to 1
+      # so the code below is not used anymore
+      #
+      # cs_term_b <- colSums(term_b)
+      #
+      # alpha_1_alpha <- alpha_0 + 0.5*cs_mu_q_gamma
+      # beta_1_alpha <- beta_0 + 0.5*cs_term_b
+      #
+      # mu_q_alpha <- (alpha_0 + 0.5*cs_mu_q_gamma) / (beta_0 + 0.5*cs_term_b)
+      # mu_q_log_alpha <- digamma(alpha_1_alpha)- log (beta_1_alpha)
 
-                     sum_val_phi_q_tilde <- Reduce("+", lapply(setdiff(1:Q, q), function(q_tilde) {
-                     mu_q_b[j,q_tilde]*C[[i]]%*%mu_q_nu_phi[[q_tilde]]%*%mu_q_zeta[[q_tilde]][i,]
+    } else {
+      #Update of q(omega_q) and Update q(alpha_q)
+      c_1_omega <- rep(NA,Q)
+      d_1_omega <- rep(NA,Q)
+      alpha_1_alpha<- rep(NA,Q)
+      beta_1_alpha <- rep(NA,Q)
 
-                     }))
+      mu_q_log_omega <- rep(NA,Q)
+      mu_q_log_1_omega <- rep(NA,Q)
+      mu_q_log_alpha <- rep(0,Q)
+      #mu_q_alpha <- rep(NA,Q)
+      for (q in 1:Q){
+        sum_term_gamma <-0
+        sum_term_alpha_beta <- 0
 
-                     sum_val_phi + mu_q_b[j,q]*t(mu_q_zeta[[q]][i,])%*%t(mu_q_nu_phi[[q]])%*%t(C[[i]])%*%sum_val_phi_q_tilde
-
-                     }))
-        }))
-      })
-
-
-      mu_q_recip_sigsq_eps <- kappa_q_sigsq_eps/lambda_q_sigsq_eps
-      mu_q_log_sigsq_eps <- log(lambda_q_sigsq_eps)-digamma(kappa_q_sigsq_eps)
-
-      lambda_q_a_eps <- mu_q_recip_sigsq_eps + 1/A^2
-      mu_q_recip_a_eps <- kappa_q_a_eps/lambda_q_a_eps
-      mu_q_log_a_eps <- log(lambda_q_a_eps)-digamma(kappa_q_a_eps)
-
-      # mu_q_u_mu <- lapply(1:p, function(j) mu_q_nu_mu[[j]][-c(1:2)])
-      # Sigma_q_u_mu <- lapply(1:p, function(j) Sigma_q_nu_mu[[j]][-c(1:2), -c(1:2)])
-
-      lambda_q_sigsq_mu <- sapply(1:p, function(j) {
-        mu_q_u_mu_j <- mu_q_nu_mu[[j]][-c(1:2)]
-        Sigma_q_u_mu_j <- Sigma_q_nu_mu[[j]][-c(1:2), -c(1:2)]
-        0.5*(crossprod(mu_q_u_mu_j)+tr(Sigma_q_u_mu_j))+mu_q_recip_a_mu[j]
-      })
-
-      mu_q_recip_sigsq_mu <- kappa_q_sigsq_mu/lambda_q_sigsq_mu
-      mu_q_log_sigsq_mu <- log(lambda_q_sigsq_mu) - digamma(kappa_q_sigsq_mu)
-
-      lambda_q_a_mu <- mu_q_recip_sigsq_mu + 1/A^2
-      mu_q_recip_a_mu <- kappa_q_a_mu/lambda_q_a_mu
-      mu_q_log_a_mu <- log(lambda_q_a_mu)- digamma(kappa_q_a_mu)
-
-
-    }
-
-
-    # Update q(sigsa_eps_j) & Update of q(a_eps)
-    #Update of q(sigma_mu) & Update of q(a_mu)
-    if (!new_version) {
-
-      # mu_q_recip_a_eps <- rep(1, p) # Question for S: was this wrong? I think it should not be set to one
-      lambda_q_sigsq_eps <- rep(NA,p)
-      lambda_q_a_eps <- rep(NA,p)
-      mu_q_log_sigsq_eps <- rep(NA,p)
-      mu_q_log_a_eps <- rep(NA,p)
-
-      # mu_q_recip_a_mu <- rep(1, p) # Question for S: was this wrong? I think it should not be set to one
-      lambda_q_sigsq_mu <- rep(NA,p)
-      lambda_q_a_mu <- rep(NA,p)
-      mu_q_log_sigsq_mu <- rep(NA,p)
-      mu_q_log_a_mu <- rep(NA,p)
-
-      for (j in 1:p){
-        sum_val_y <-0
-        sum_val_mu <- 0
-        sum_val_phi <-0
-        for (i in 1:N){
-          sum_val_y <- sum_val_y+ list_cp_Y[i,j] -2*t(mu_q_nu_mu[[j]])%*%list_cp_C_Y[[i]][,j] # ok
-          sum_val_mu <- sum_val_mu+ t(mu_q_nu_mu[[j]])%*%list_cp_C[[i]]%*%mu_q_nu_mu[[j]]+ tr(list_cp_C[[i]]%*% Sigma_q_nu_mu[[j]]) # ok
-          for (q in 1:Q){
-            mu_V_q_phi <- matrix(NA,nrow = K+2, ncol = L) # ok
-            tr_term <- diag(L) # ok
-            for (l in 1:L){ # ok
-              mu_V_q_phi[,l]<- mu_q_nu_phi[[q]][,l]
-              tr_term[l,l] <- tr(list_cp_C[[i]]%*% Sigma_q_nu_phi[[q]][[l]])
-            }
-            mu_H_q_phi <- t(mu_V_q_phi)%*%list_cp_C[[i]]%*%mu_V_q_phi + tr_term # mu_H_q_phi[[q]][[i]] already computed above.
-            # term_val_y <- 2*mu_q_b[j,q]*t(mu_q_zeta[[i]][[q]])%*%t(mu_V_q_phi)%*%list_cp_C_Y[[i]][,j]
-            term_val_y <- 2*mu_q_b[j,q]*t(mu_q_zeta[[q]][i,])%*%t(mu_V_q_phi)%*%list_cp_C_Y[[i]][,j] # ok
-            sum_val_y <- sum_val_y - term_val_y # ok
-
-            sum_val_mu <- sum_val_mu+2*mu_q_b[j,q]*t(mu_q_zeta[[q]][i,])%*%t(mu_V_q_phi)%*%list_cp_C[[i]]%*%mu_q_nu_mu[[j]] # ok
-            sum_val_phi<- sum_val_phi + (mu_q_normal_b[j,q]^2+Sigma_q_normal_b[j,q])*mu_q_gamma[j,q]*
-              tr(mu_H_q_phi%*%(Sigma_q_zeta[[q]][[i]]+tcrossprod(mu_q_zeta[[q]][i,])))
-            sum_val_phi_q_tilde <- rep(0, length(time_obs[[i]]))
-            for (q_tilde in 1:Q){
-              if (q_tilde !=q){
-                mu_V_q_tilde_phi<- matrix(NA,nrow = K+2, ncol = L)
-                for (l in 1:L){
-                  mu_V_q_tilde_phi[,l]<- mu_q_nu_phi[[q_tilde]][,l]
-                }
-                sum_val_phi_q_tilde<- sum_val_phi_q_tilde+mu_q_b[j,q_tilde]*C[[i]]%*%mu_V_q_tilde_phi%*%mu_q_zeta[[q_tilde]][i,]
-              }
-            }
-            sum_val_phi <- sum_val_phi +mu_q_b[j,q]*t(mu_q_zeta[[q]][i,])%*%t(mu_V_q_phi)%*%t(C[[i]])%*%sum_val_phi_q_tilde
-          }
+        for (j in 1:p){
+          sum_term_gamma <- sum_term_gamma + mu_q_gamma[j,q]
+          # sum_term_alpha_beta <- sum_term_alpha_beta+ term_b[j,q]
         }
-        lambda_q_sigsq_eps[j]<- mu_q_recip_a_eps[j]+ 0.5*(unlist(sum_val_y+sum_val_mu+sum_val_phi))
-        # lambda_q_sigsq_eps[j]<- mu_q_recip_a_eps[j]+ 0.5*(unlist(sum_val_y))#+sum_val_mu+sum_val_phi))
-        mu_q_recip_sigsq_eps[j]<- kappa_q_sigsq_eps/lambda_q_sigsq_eps[j]
-        #mu_q_recip_sigsq_eps[j]<- 1
-        mu_q_log_sigsq_eps[j]<- log(lambda_q_sigsq_eps[j])-digamma(kappa_q_sigsq_eps)
+        c_1_omega[q]<- c_0 + sum_term_gamma
+        d_1_omega[q]<- d_0+ p -sum_term_gamma
 
-        lambda_q_a_eps[j]<- mu_q_recip_sigsq_eps[j] + 1/A^2
-        mu_q_recip_a_eps[j] <- kappa_q_a_eps/lambda_q_a_eps[j]
-        mu_q_log_a_eps[j]<- log(lambda_q_a_eps[j])-digamma(kappa_q_a_eps)
+        #alpha_1_alpha[q]<- alpha_0 + 0.5* sum_term_gamma
+        #beta_1_alpha[q]<- beta_0 + 0.5*sum_term_alpha_beta
 
+        mu_q_log_omega[q]<- digamma(c_1_omega[q])- digamma(c_0+ d_0 + p)
+        mu_q_log_1_omega[q]<- digamma(d_1_omega[q])-digamma(c_0+ d_0 + p)
 
-        mu_q_u_mu <- mu_q_nu_mu[[j]][-c(1:2)]
-        Sigma_q_u_mu <- Sigma_q_nu_mu[[j]][-c(1:2), -c(1:2)]
-
-        lambda_q_sigsq_mu[j] <-  0.5*(t(mu_q_u_mu)%*%mu_q_u_mu+tr(Sigma_q_u_mu))+mu_q_recip_a_mu[j]
-        mu_q_recip_sigsq_mu[j]<- kappa_q_sigsq_mu/lambda_q_sigsq_mu[j]
-        mu_q_log_sigsq_mu[j]<- log(lambda_q_sigsq_mu[j])-digamma(kappa_q_sigsq_mu)
-
-        lambda_q_a_mu[j]<- mu_q_recip_sigsq_mu[j]+ 1/A^2
-        mu_q_recip_a_mu[j]<- kappa_q_a_mu/lambda_q_a_mu[j]
-        mu_q_log_a_mu[j]<- log(lambda_q_a_mu[j])- digamma(kappa_q_a_mu)
-
+        #mu_q_alpha[q]<- (alpha_0 + 0.5* sum_term_gamma)/(beta_0 + 0.5*sum_term_alpha_beta)
+        #mu_q_log_alpha[q]<- digamma(alpha_1_alpha[q])- log ( beta_1_alpha[q] )
       }
     }
 
-
-    # print(isTRUE(all.equal(lambda_q_sigsq_eps, lambda_q_sigsq_eps_2)))
-
-    # print(isTRUE(all.equal(mu_q_recip_a_eps, mu_q_recip_a_eps_2)))
-
-    #Update of q(sigma_phi) & Update of q(a_phi)
-
-    lambda_q_sigsq_phi <- matrix(NA, nrow = Q, ncol = L)
-    mu_q_recip_sigsq_phi  <- matrix(NA, nrow = Q, ncol = L)
-    mu_q_log_sigsq_phi<- matrix(NA, nrow = Q, ncol = L)
-
-    lambda_q_a_phi <-  matrix(NA, nrow = Q, ncol = L)
-    mu_q_log_a_phi <-matrix(NA, nrow = Q, ncol = L)
-
-    for (q in 1:Q){
-      for( l in 1:L){
-        mu_q_u_phi <- mu_q_nu_phi[[q]][-c(1:2),l]
-        Sigma_q_u_phi <- Sigma_q_nu_phi[[q]][[l]][-c(1:2), -c(1:2)]
-
-        lambda_q_sigsq_phi[q,l] <- mu_q_recip_a_phi[q,l] + 0.5*( tr(Sigma_q_u_phi)+t(mu_q_u_phi)%*%mu_q_u_phi)
-        mu_q_recip_sigsq_phi[q,l] <- kappa_q_sigsq_phi/ lambda_q_sigsq_phi[q,l]
-        mu_q_log_sigsq_phi[q,l]<- log(lambda_q_sigsq_phi[q,l])-digamma(kappa_q_sigsq_phi)
-
-        lambda_q_a_phi[q,l]<- mu_q_recip_sigsq_phi[q,l]+ 1/A^2
-        mu_q_recip_a_phi[q,l]<- kappa_q_a_phi/lambda_q_a_phi[q,l]
-        mu_q_log_a_phi[q,l]<- log(lambda_q_a_phi[q,l])- digamma(kappa_q_a_phi)
-      }
-    }
-
-    #Update of q(omega_q) and Update q(alpha_q)
-    c_1_omega <- rep(NA,Q)
-    d_1_omega <- rep(NA,Q)
-    alpha_1_alpha<- rep(NA,Q)
-    beta_1_alpha <- rep(NA,Q)
-
-    mu_q_log_omega <- rep(NA,Q)
-    mu_q_log_1_omega <- rep(NA,Q)
-    mu_q_log_alpha <- rep(0,Q)
-    #mu_q_alpha <- rep(NA,Q)
-    for (q in 1:Q){
-      sum_term_gamma <-0
-      sum_term_alpha_beta <- 0
-      for (j in 1:p){
-        sum_term_gamma <- sum_term_gamma + mu_q_gamma[j,q]
-        sum_term_alpha_beta <- sum_term_alpha_beta+ mu_q_gamma[j,q]*(mu_q_normal_b[j,q]^2 + Sigma_q_normal_b[j,q])
-      }
-      c_1_omega[q]<- c_0 + sum_term_gamma
-      d_1_omega[q]<- d_0+ p -sum_term_gamma
-
-      #alpha_1_alpha[q]<- alpha_0 + 0.5* sum_term_gamma
-      #beta_1_alpha[q]<- beta_0 + 0.5*sum_term_alpha_beta
-
-      mu_q_log_omega[q]<- digamma(c_1_omega[q])- digamma(c_0+ d_0 + p)
-      mu_q_log_1_omega[q]<- digamma(d_1_omega[q])-digamma(c_0+ d_0 + p)
-
-      #mu_q_alpha[q]<- (alpha_0 + 0.5* sum_term_gamma)/(beta_0 + 0.5*sum_term_alpha_beta)
-      #mu_q_log_alpha[q]<- digamma(alpha_1_alpha[q])- log ( beta_1_alpha[q] )
-    }
     #Update of q(b_jq |gamma_jq)
     Sigma_q_b <- matrix(NA, nrow=p, ncol=Q)
     for (j in 1:p){
@@ -508,17 +426,21 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
           sum_mu <- sum_mu +t(mu_q_zeta[[q]][i,])%*%
             t(mu_V_q_phi)%*%(list_cp_C_Y[[i]][,j]-list_cp_C[[i]]%*%mu_q_nu_mu[[j]]-list_cp_C[[i]]%*%sum_mu_tilde)
         }
-        Sigma_q_normal_b[j,q]<- 1/(mu_q_recip_sigsq_eps[j]*sum_sigma+ mu_q_alpha[q])
+        Sigma_q_normal_b[j,q]<- 1/(mu_q_recip_sigsq_eps[j]*sum_sigma + 1) #+ mu_q_alpha[q])
         mu_q_normal_b[j,q]<- Sigma_q_normal_b[j,q]*mu_q_recip_sigsq_eps[j]*sum_mu
-        mu_q_gamma[j,q]<- (1 + (mu_q_recip_sigsq_eps[j]*sum_sigma+ mu_q_alpha[q])^(1/2)*
+        mu_q_gamma[j,q]<- (1 + (mu_q_recip_sigsq_eps[j]*sum_sigma+ 1)^(1/2)*#mu_q_alpha[q])^(1/2)*
                              exp(mu_q_log_1_omega[q]-mu_q_log_omega[q]-
-                                   0.5*(mu_q_normal_b[j,q]^2)*(mu_q_recip_sigsq_eps[j]*sum_sigma+ mu_q_alpha[q])-
-                                   0.5*mu_q_log_alpha[q]) )^(-1)
+                                   0.5*(mu_q_normal_b[j,q]^2)*(mu_q_recip_sigsq_eps[j]*sum_sigma+ 1)) )^(-1) # mu_q_alpha[q])
+                                 # -
+                                 #   0.5*mu_q_log_alpha[q]
+                                 #) )^(-1)
 
         mu_q_b[j,q]<- mu_q_gamma[j,q]*mu_q_normal_b[j,q]
-        Sigma_q_b[j,q]<- mu_q_gamma[j,q]*(Sigma_q_normal_b[j,q]+mu_q_normal_b[j,q]^2)-mu_q_b[j,q]^2
+
       }
     }
+    term_b <- (Sigma_q_normal_b + mu_q_normal_b^2)*mu_q_gamma
+    Sigma_q_b <- term_b - mu_q_b^2
 
     #COMPUTE ELBO
     ELBO_iter <- sum(sapply(1:p, function (j) {-(sum(sapply(time_obs, function(x) length (x)))/2)*(log(2*pi)+ mu_q_log_sigsq_eps[j])-
@@ -539,8 +461,9 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
         log(lambda_q_a_eps[j])-lgamma(0.5)+lgamma(1)+ 0.5*log(1/A^2)}))
     ELBO_iter<-ELBO_iter+ sum( sapply(1: p, function(j){
       sum( sapply(1:Q, function(q){
-        0.5*mu_q_gamma[j,q]*(log(Sigma_q_normal_b[j,q])+ mu_q_log_alpha[q]+1)-
-          0.5*mu_q_gamma[j,q]*mu_q_alpha[q]*(Sigma_q_normal_b[j,q]+(mu_q_normal_b[j,q]^2))+mu_q_gamma[j,q]*mu_q_log_omega[q]+
+        0.5*mu_q_gamma[j,q]*(log(Sigma_q_normal_b[j,q])+ 1)- #mu_q_log_alpha[q] +1)-
+          0.5*mu_q_gamma[j,q]*# mu_q_alpha[q]*
+          (Sigma_q_normal_b[j,q]+(mu_q_normal_b[j,q]^2))+mu_q_gamma[j,q]*mu_q_log_omega[q]+
           (1-mu_q_gamma[j,q])*mu_q_log_1_omega[q]-mu_q_gamma[j,q]*log(mu_q_gamma[j,q]+1e-11)- (1-mu_q_gamma[j,q])*log(1-mu_q_gamma[j,q]+1e-11)
       }))
     }))
@@ -625,7 +548,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
                            list_Zeta_hat, list_Cov_zeta_hat, list_list_zeta_ellipse,
                            Sigma_q_nu_mu,mu_q_nu_mu, Sigma_q_nu_phi,mu_q_nu_phi,mu_q_zeta, Sigma_q_zeta, sigsq_eps,
                            lambda_q_sigsq_phi, lambda_q_a_phi, lambda_q_sigsq_mu, lambda_q_a_mu, lambda_q_sigsq_eps,
-                           lambda_q_a_eps, mu_q_b,Sigma_q_normal_b,mu_q_gamma,mu_q_alpha, ELBO, n_g, time_g, C_g)
+                           lambda_q_a_eps, mu_q_b,Sigma_q_normal_b,mu_q_gamma, ELBO, n_g, time_g, C_g)
 
 
 }
