@@ -364,66 +364,27 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
     rs_tr_qi <- rowSums(tr_qi)
     Sigma_q_b <- matrix(NA, nrow=p, ncol=Q)
 
-    # sum_mu_2 <- sapply(1:Q, function(q) sapply(1:p, function(j) sum(sapply(1:N, function(i) crossprod(mu_q_nu_phi[[q]]%*%mu_q_zeta[[q]][i,],
-    #                                                                                                   list_cp_C_Y[[i]][,j]-
-    #                                                                                                     list_cp_C[[i]]%*%mu_q_nu_mu[[j]]-
-    #                                                                                                     list_cp_C[[i]]%*%rowSums(sapply(setdiff(1:Q, q), function(q_tilde) mu_q_b[j,q_tilde]*mu_q_nu_phi[[q_tilde]]%*%mu_q_zeta[[q_tilde]][i,])))))))
+    for(q in 1:Q){
 
-    # for (j in 1:p){
+      sum_mu_q <- sapply(1:p, function(j) sum(sapply(1:N, function(i) crossprod(mu_q_nu_phi[[q]]%*%mu_q_zeta[[q]][i,],
+                                                                                                        list_cp_C_Y[[i]][,j]-
+                                                                                                          list_cp_C[[i]]%*%mu_q_nu_mu[[j]]-
+                                                                                                          list_cp_C[[i]]%*%rowSums(sapply(setdiff(1:Q, q), function(q_tilde) mu_q_gamma[j,q_tilde]*mu_q_normal_b[j,q_tilde]*mu_q_nu_phi[[q_tilde]]%*%mu_q_zeta[[q_tilde]][i,]))))))
 
-      for(q in 1:Q){
-        # rs_tr_qi <- 0
-        # sum_mu <- 0
-        # for( i in 1:N){
-          # mu_V_q_phi <- matrix(NA, nrow = K+2, ncol = L)
-          # trace_term <- diag(L)
-          # for (l in 1:L){
-          #   mu_V_q_phi[,l]<- mu_q_nu_phi[[q]][,l]
-          #   trace_term[l,l]<- tr(list_cp_C[[i]]%*% Sigma_q_nu_phi[[q]][[l]])
-          # }
-          # mu_H_q_phi <- t(mu_q_nu_phi[[q]])%*%list_cp_C[[i]]%*%mu_q_nu_phi[[q]]+ tr_term[[q]][[i]] # trace_term
-          # rs_tr_qi<-rs_tr_qi+ tr_qi[q, i] # tr(mu_H_q_phi[[q]][[i]]%*%(Sigma_q_zeta[[q]][[i]]+tcrossprod(mu_q_zeta[[q]][i,])))
-          # sum_mu_tilde_j <- rep(0, K+2 )
-          # for (q_tilde in 1:Q){
-          #   if(q_tilde != q){
-          #     # mu_V_q_tilde_phi <- matrix(NA, nrow = K+2, ncol = L)
-          #     # for (l in 1:L){
-          #     #   mu_V_q_tilde_phi[,l]<- mu_q_nu_phi[[q_tilde]][,l]
-          #     # }
-          #     sum_mu_tilde_j<- sum_mu_tilde_j+ mu_q_b[j,q_tilde]*mu_q_nu_phi[[q_tilde]]%*%mu_q_zeta[[q_tilde]][i,]
-          #   }
-          # }
-        #   sum_mu_tilde_j <- rowSums(sapply(setdiff(1:Q, q), function(q_tilde) mu_q_b[j,q_tilde]*mu_q_nu_phi[[q_tilde]]%*%mu_q_zeta[[q_tilde]][i,]))
-        #
-        #   sum_mu_j <- sum_mu_j + crossprod(mu_q_nu_phi[[q]]%*%mu_q_zeta[[q]][i,],
-        #                               list_cp_C_Y[[i]][,j]-list_cp_C[[i]]%*%mu_q_nu_mu[[j]]-list_cp_C[[i]]%*%sum_mu_tilde_j)
-        # }
+      # don't move outside the for(q in 1:Q) loop as used in the update for sum_mu_q, leads to a less efficient scheme if outside
+      Sigma_q_normal_b[,q]<- 1/(mu_q_recip_sigsq_eps * rs_tr_qi[q] + 1)
+      mu_q_normal_b[,q]<- Sigma_q_normal_b[,q]*mu_q_recip_sigsq_eps*sum_mu_q
+      mu_q_gamma[,q]<- 1 / (1 + sqrt(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1) *
+                           exp(mu_q_log_1_omega[q]-mu_q_log_omega[q] -
+                                 0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)))
 
-        # p x Q
-
-
-        sum_mu_q <- sapply(1:p, function(j) sum(sapply(1:N, function(i) crossprod(mu_q_nu_phi[[q]]%*%mu_q_zeta[[q]][i,],
-                                                                                                          list_cp_C_Y[[i]][,j]-
-                                                                                                            list_cp_C[[i]]%*%mu_q_nu_mu[[j]]-
-                                                                                                            list_cp_C[[i]]%*%rowSums(sapply(setdiff(1:Q, q), function(q_tilde) mu_q_gamma[j,q_tilde]*mu_q_normal_b[j,q_tilde]*mu_q_nu_phi[[q_tilde]]%*%mu_q_zeta[[q_tilde]][i,]))))))
-
-
-        # don't move outside the for(q in 1:Q) loop as used in the update for sum_mu_q, leads to a less efficient scheme if outside
-        Sigma_q_normal_b[,q]<- 1/(mu_q_recip_sigsq_eps * rs_tr_qi[q] + 1) #+ mu_q_alpha[q])
-        mu_q_normal_b[,q]<- Sigma_q_normal_b[,q]*mu_q_recip_sigsq_eps*sum_mu_q
-        mu_q_gamma[,q]<- 1 / (1 + (mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)^(1/2)*#mu_q_alpha[q])^(1/2)*
-                             exp(mu_q_log_1_omega[q]-mu_q_log_omega[q]-
-                                   0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1))) # mu_q_alpha[q])
-                                 # -
-                                 #   0.5*mu_q_log_alpha[q]
-                                 #) )^(-1)
-
-
-      # }
-      }
+    }
     mu_q_b<- mu_q_gamma*mu_q_normal_b
     term_b <- (Sigma_q_normal_b + mu_q_normal_b^2)*mu_q_gamma
     Sigma_q_b <- term_b - mu_q_b^2
+
+
+
 
     #COMPUTE ELBO
     ELBO_iter <- sum(sapply(1:p, function (j) {-(sum(sapply(time_obs, function(x) length (x)))/2)*(log(2*pi)+ mu_q_log_sigsq_eps[j])-
