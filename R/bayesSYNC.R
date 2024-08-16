@@ -398,9 +398,6 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
     #COMPUTE ELBO
     elbo_y <- - sum(sum_obs/2*(log(2*pi) + mu_q_log_sigsq_eps) + mu_q_recip_sigsq_eps*(lambda_q_sigsq_eps - mu_q_recip_a_eps))
 
-    # ELBO_iter <- sum(sapply(1:p, function (j) {-sum_obs/2*(log(2*pi)+ mu_q_log_sigsq_eps[j])-
-    #     mu_q_recip_sigsq_eps[j]*( lambda_q_sigsq_eps[j]- mu_q_recip_a_eps[j])} ))#term of Y
-
     vec_term_list_mu <- sapply(1:p, function(j) {
       log_det_j_obj <- determinant(Sigma_q_nu_mu[[j]], logarithm = TRUE)
       log_det_j_obj$modulus * log_det_j_obj$sign - crossprod(mu_q_nu_mu[[j]], inv_Sigma_q_nu_mu[[j]] %*% mu_q_nu_mu[[j]]) - tr(inv_Sigma_q_nu_mu[[j]] %*% Sigma_q_nu_mu[[j]])})
@@ -414,65 +411,18 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
       (3/2)*mu_q_log_a_eps -mu_q_recip_a_eps*(1/A^2-lambda_q_a_eps)-
       log(lambda_q_a_eps)-lgamma(0.5)+lgamma(1)+ 0.5*log(1/A^2))
 
-    # ELBO_iter <- ELBO_iter + sum(sapply(1:p, function(j){
-    #   E_q_inv_Sigma_nu_mu_j <- inv_Sigma_q_nu_mu[[j]]
-    #   # blkdiag(
-    #   #   inv_Sigma_beta,
-    #   #   mu_q_recip_sigsq_mu[j]*diag(K))
-    #   log_det_j_obj <- determinant(Sigma_q_nu_mu[[j]], logarithm = TRUE)
-    #   log_det_j <- log_det_j_obj$modulus * log_det_j_obj$sign
-    #   -1*log(sigma_zeta)+ 0.5*log_det_j-(K/2)*(mu_q_log_sigsq_mu[j])-0.5*(unlist(t(mu_q_nu_mu[[j]])%*%E_q_inv_Sigma_nu_mu_j%*%mu_q_nu_mu[[j]])+ tr(E_q_inv_Sigma_nu_mu_j %*% Sigma_q_nu_mu[[j]])) +K/2 + 1+
-    #     K/2*mu_q_log_sigsq_mu[j] - mu_q_recip_sigsq_mu[j]*(mu_q_recip_a_mu[j]-lambda_q_sigsq_mu[j])-
-    #     0.5*mu_q_log_a_mu[j] -kappa_q_sigsq_mu*log(lambda_q_sigsq_mu[j])-lgamma(0.5)+lgamma(kappa_q_sigsq_mu)+
-    #     (3/2)*mu_q_log_a_mu[j]-mu_q_recip_a_mu[j]*(1/A^2-lambda_q_a_mu[j] )-log(lambda_q_a_mu[j])-lgamma(0.5)+lgamma(1)+ 0.5*log(1/A^2)+
-    #     (kappa_q_sigsq_eps -0.5)*mu_q_log_sigsq_eps[j]-mu_q_recip_sigsq_eps[j]*(mu_q_recip_a_eps[j]-lambda_q_sigsq_eps[j])-
-    #     0.5*mu_q_log_a_eps[j]-kappa_q_sigsq_eps*log(lambda_q_sigsq_eps[j])-lgamma(0.5)+ lgamma(kappa_q_sigsq_eps)+
-    #     (3/2)*mu_q_log_a_eps[j] -mu_q_recip_a_eps[j]*(1/A^2-lambda_q_a_eps[j])-
-    #     log(lambda_q_a_eps[j])-lgamma(0.5)+lgamma(1)+ 0.5*log(1/A^2)}))
-
-
     elbo_b_g <- sum(0.5*mu_q_gamma*(log(Sigma_q_normal_b)+ 1) - 0.5*term_b +
       sweep(mu_q_gamma, 2, mu_q_log_omega, "*") +
       sweep(1 - mu_q_gamma, 2, mu_q_log_1_omega, "*") -
       mu_q_gamma*log(mu_q_gamma + eps_elbo) - (1-mu_q_gamma)*log(1- mu_q_gamma + eps_elbo))
 
-
-    # ELBO_iter<-ELBO_iter+ sum( sapply(1: p, function(j){
-    #   sum( sapply(1:Q, function(q){
-    #     0.5*mu_q_gamma[j,q]*(log(Sigma_q_normal_b[j,q])+ 1)- #mu_q_log_alpha[q] +1)-
-    #       0.5*mu_q_gamma[j,q]*# mu_q_alpha[q]*
-    #       (Sigma_q_normal_b[j,q]+(mu_q_normal_b[j,q]^2))+mu_q_gamma[j,q]*mu_q_log_omega[q]+
-    #       (1-mu_q_gamma[j,q])*mu_q_log_1_omega[q]-mu_q_gamma[j,q]*log(mu_q_gamma[j,q]+1e-11)- (1-mu_q_gamma[j,q])*log(1-mu_q_gamma[j,q]+1e-11)
-    #   }))
-    # }))
-
-    # ELBO_iter <- elbo_y + elbo_nu + elbo_b_g
-
-    #
-
     elbo_omega <- sum((c_0 - c_1_omega) * mu_q_log_omega + (d_0 - d_1_omega) * mu_q_log_1_omega +
       lbeta(c_1_omega, d_1_omega) - lbeta(c_0,d_0))
-
-    # ELBO_iter <- ELBO_iter + sum(sapply(1:Q, function(q){
-    #   (c_0 -c_1_omega[q])*mu_q_log_omega[q]+ (d_0 -d_1_omega[q])*mu_q_log_1_omega[q]+ log( beta(c_1_omega[q], d_1_omega[q]))-log(beta(c_0,d_0))
-    # })) #term omega
 
     elbo_sig_phi <- sum(K/2*mu_q_log_sigsq_phi - (mu_q_recip_a_phi - lambda_q_sigsq_phi)*mu_q_recip_sigsq_phi -
       0.5*mu_q_log_a_phi - kappa_q_sigsq_phi*log(lambda_q_sigsq_phi) - lgamma(0.5) + lgamma(kappa_q_sigsq_phi) +
       (3/2)*mu_q_log_a_phi - (1/A^2-lambda_q_a_phi)*mu_q_recip_a_phi +
       0.5*log(1/A^2) - log(lambda_q_a_phi) - lgamma(0.5) + lgamma(1))
-
-    # ELBO_iter<- ELBO_iter+ sum(sapply(1:Q, function(q){
-    #   sum(sapply(1:L, function(l){
-    #     (K/2)*mu_q_log_sigsq_phi[q,l]- (mu_q_recip_a_phi[q,l]-lambda_q_sigsq_phi[q,l])*mu_q_recip_sigsq_phi[q,l]-
-    #       0.5* mu_q_log_a_phi[q,l]-kappa_q_sigsq_phi*log(lambda_q_sigsq_phi[q,l]) -lgamma(0.5)+lgamma(kappa_q_sigsq_phi)+
-    #       (3/2)*(mu_q_log_a_phi[q,l])-(1/A^2-lambda_q_a_phi[q,l])*mu_q_recip_a_phi[q,l]+
-    #       0.5*log(1/A^2)- log(lambda_q_a_phi[q,l])-lgamma(0.5)+lgamma(1)
-    #   }))
-    # }))# q_phi, sigsq_phi
-
-
-    # print(isTRUE(all.equal(ELBO_iter, elbo_y + elbo_mu + elbo_b_g + elbo_omega + elbo_sig_phi)))
 
     mat_term_list_phi <- sapply(1:L, function(l) sapply(1:Q, function(q) {
       log_det_q_l_obj <- determinant(Sigma_q_nu_phi[[q]][[l]], logarithm = TRUE)
@@ -480,43 +430,15 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
 
     elbo_phi <- -Q*L*log(sigma_zeta) + sum(0.5*mat_term_list_phi - (K/2)*mu_q_log_sigsq_phi + K/2 + 1)
 
-    # ELBO_iter<- ELBO_iter+ sum(sapply(1:Q, function(q){
-    #   sum(sapply(1:L, function(l){
-    #     inv_Sigma_q_nu_phi_q_l <- blkdiag(
-    #       inv_Sigma_beta,
-    #       mu_q_recip_sigsq_phi[q,l]*diag(K)
-    #     )
-    #     log_det_q_l_obj <- determinant(Sigma_q_nu_phi[[q]][[l]], logarithm = TRUE)
-    #     log_det_q_l <- log_det_q_l_obj$modulus * log_det_q_l_obj$sign
-    #     -1*log(sigma_zeta)+ 0.5*log_det_q_l-(K/2)*(mu_q_log_sigsq_phi[q,l])-
-    #       0.5*(unlist((t(mu_q_nu_phi[[q]][,l])%*%inv_Sigma_q_nu_phi_q_l%*%mu_q_nu_phi[[q]][,l])+ tr(inv_Sigma_q_nu_phi_q_l%*% Sigma_q_nu_phi[[q]][[l]])))+
-    #       K/2 + 1 #mu_phi
-    #   }))
-    # }))
-
-
     elbo_zeta <- sum(sapply(1:Q, function(q)
       sum(sapply(1:N, function (i){
         log_det_i_q_obj <- determinant(Sigma_q_zeta[[q]][[i]], logarithm = TRUE)
         log_det_i_q <- log_det_i_q_obj$modulus * log_det_i_q_obj$sign
 
-        0.5*log_det_i_q - L/2 * log(sigma_zeta) + L/2 - 0.5/sigma_zeta *(crossprod(mu_q_zeta[[q]][i,]) + tr(Sigma_q_zeta[[q]][[i]])) #term of zeta
+        0.5*log_det_i_q - L/2 * log(sigma_zeta) + L/2 - 0.5/sigma_zeta *(crossprod(mu_q_zeta[[q]][i,]) + tr(Sigma_q_zeta[[q]][[i]]))}))))
 
-      }))))
-
-    # ELBO_iter<- ELBO_iter + sum( sapply(1:Q, function(q){
-    #   sum(sapply(1:N, function (i){
-    #     log_det_i_q_obj <- determinant(Sigma_q_zeta[[q]][[i]], logarithm = TRUE)
-    #     log_det_i_q <- log_det_i_q_obj$modulus * log_det_i_q_obj$sign
-    #     unlist(0.5*log_det_i_q-(L/2)*log(sigma_zeta)+L/2-(0.5/sigma_zeta)*(crossprod(mu_q_zeta[[q]][i,]) + tr(Sigma_q_zeta[[q]][[i]]))) #term of zeta
-    #
-    #   }))
-    # }))
 
     ELBO_iter <- elbo_y + elbo_mu + elbo_b_g + elbo_omega + elbo_sig_phi + elbo_phi + elbo_zeta
-
-
-    # print(isTRUE(all.equal(ELBO_iter, elbo_y + elbo_mu + elbo_b_g + elbo_omega + elbo_sig_phi  + elbo_phi + elbo_zeta)))
 
     ELBO <- c(ELBO, ELBO_iter)
 
@@ -571,9 +493,6 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
 
 
 }
-
-
-
 
 
 
