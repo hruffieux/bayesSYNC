@@ -184,6 +184,8 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
   inv_Sigma_q_nu_phi <- parallel::mclapply(1:Q, function(q) lapply(1:L, function(l) blkdiag(inv_Sigma_beta,
                                                                                               mu_q_recip_sigsq_phi[q,l]*diag(K))), mc.cores = n_cpus)
 
+  Sigma_q_nu_phi <- lapply(1:Q, function(q) lapply(1:L, function(i) matrix(NA, nrow = K+2, ncol = K+2)))
+
   ELBO <- NULL
   for(i_iter in 1:maxit) {
 
@@ -240,7 +242,6 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
             tmp_term_qil[[q_tilde]] <- rowSums(sapply(1:L, function(l_tilde) { mu_q_zeta[[q_tilde]][i,l_tilde] * mu_q_zeta[[q]][i,l] *
                 list_cp_C[[i]] %*% mu_q_nu_phi[[q_tilde]][,l_tilde]
             }))
-
             tmp_term_qil[[q_tilde]] <- tmp_term_qil[[q_tilde]] * sum(mu_q_recip_sigsq_eps * mu_q_b[, q] * mu_q_b[, q_tilde])
 
           }
@@ -394,8 +395,8 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
     inv_Sigma_q_nu_phi <- parallel::mclapply(1:Q, function(q) lapply(1:L, function(l) blkdiag(inv_Sigma_beta,
                                                                                               mu_q_recip_sigsq_phi[q,l]*diag(K))), mc.cores = n_cpus)
 
-
-    #COMPUTE ELBO
+    # COMPUTE ELBO
+    #
     elbo_y <- - sum(sum_obs/2*(log(2*pi) + mu_q_log_sigsq_eps) + mu_q_recip_sigsq_eps*(lambda_q_sigsq_eps - mu_q_recip_a_eps))
 
     vec_term_list_mu <- sapply(1:p, function(j) {
@@ -663,7 +664,7 @@ orthonormalise <- function(N, p, Q, L, time_g, C_g, # see what she has used?
 
   }
 
-  list_Y_hat <- list_Y_low <- list_Y_upp <- vector("list", length = p)
+  list_Y_hat <- list_Y_low <- list_Y_upp <- vector("list", length = N)
 
   list_var_vec <- lapply(1:Q, function(q) lapply(1:N, function(i)
     diag(tcrossprod(list_M_q_Phi[[q]]%*%Sigma_q_zeta[[q]][[i]], list_M_q_Phi[[q]])))) # functions assumed to be known exactly (we can use all objects pre-orthogonalisation to construct y)
@@ -671,17 +672,17 @@ orthonormalise <- function(N, p, Q, L, time_g, C_g, # see what she has used?
   # list_sd_vec <- lapply(1:Q, function(q) lapply(1:N, function(i)
   #   sqrt(diag(tcrossprod(list_list_Phi_hat[[q]]%*%list_Cov_zeta_hat[[q]][[i]], list_list_Phi_hat[[q]]))))) # functions assumed to be known exactly
 
-  for (j in 1:p) {
+  for(i in 1:N) {
 
-    list_Y_hat[[j]] <- list_Y_low[[j]] <- list_Y_upp[[j]] <- vector("list", length = N)
-    for(i in 1:N) {
+    list_Y_hat[[i]] <- list_Y_low[[i]] <- list_Y_upp[[i]] <- vector("list", length = p)
 
+    for (j in 1:p) {
       sd_i_j <- sqrt(Reduce("+", lapply(1:Q, function(q) mu_q_b[j, q]^2 * list_var_vec[[q]][[i]])) + sigsq_eps[j])# B assumed to be known exactly (variance = b^T Psi^T Cov_zeta Psi b) so sqrt(b^2) for sd
 
 
-      list_Y_hat[[j]][[i]] <- list_Y_mat[[j]][,i]
-      list_Y_low[[j]][[i]] <- list_Y_mat[[j]][,i] + qnorm(0.025) * sd_i_j
-      list_Y_upp[[j]][[i]] <- list_Y_mat[[j]][,i] + qnorm(0.975) * sd_i_j
+      list_Y_hat[[i]][[j]] <- list_Y_mat[[j]][,i]
+      list_Y_low[[i]][[j]] <- list_Y_mat[[j]][,i] + qnorm(0.025) * sd_i_j
+      list_Y_upp[[i]][[j]] <- list_Y_mat[[j]][,i] + qnorm(0.975) * sd_i_j
     }
 
   }
