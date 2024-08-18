@@ -4,14 +4,7 @@
 \alias{set_hyper}
 \title{Gather model hyperparameters.}
 \usage{
-set_hyper(
-  sigma_beta = 1e+05,
-  A = 1e+05,
-  c_0 = 1,
-  d_0 = 1,
-  alpha_0 = 1,
-  beta_0 = 0.5
-)
+set_hyper(sigma_beta = 1e+05, A = 1e+05, c_0 = 1, d_0 = 1)
 }
 \arguments{
 \item{sigma_beta}{Vector of size 1 or 2 for the standard deviation of the
@@ -23,10 +16,6 @@ iterated inverse chi-square distributions.}
 \item{c_0}{to add}
 
 \item{d_0}{to add}
-
-\item{alpha_0}{to add}
-
-\item{beta_0}{to add}
 }
 \value{
 An object containing the hyperparameter settings to be supplied to

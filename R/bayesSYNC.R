@@ -16,8 +16,6 @@
 #' @param time_g Dense grid provided as a vector of size \code{n_g}. If provided,
 #'               then \code{n_g} must be \code{NULL} as it will be taken to be
 #'               \code{length(time_g)}.
-#' @param Psi_g Reference eigenfunctions (if available, e.g., in simulations)
-#'              used to flip the sign of the resulting scores and eigenfunctions.
 #' @param tol_abs Tolerance on the absolute changes in the ELBO.
 #' @param tol_rel Tolerance on the relative changes in the ELBO.
 #' @param maxit Number of iterations for the mean-field variational Bayes algorithm. Default maxit = 500.
@@ -31,14 +29,14 @@
 #' @export
 #'
 # bayesSYNC <- function(time_obs, Y, L, K = NULL, list_hyper = NULL, maxit = 500,
-#                   n_g = 1000, time_g = NULL, Psi_g = NULL, verbose = TRUE, seed = NULL) {
+#                   n_g = 1000, time_g = NULL, Phi_g = NULL, verbose = TRUE, seed = NULL) {
 #   # Function implementation here
 # }
 
 bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
                       list_hyper = NULL,
                       n_g = 1000, time_g = NULL,
-                      Psi_g = NULL, tol_abs = 1e-3,
+                      tol_abs = 1e-3,
                       tol_rel = 1e-5, maxit = 500, n_cpus = 1, verbose = TRUE, seed = NULL) {
 
   check_structure(seed, "vector", "numeric", 1, null_ok = TRUE)
@@ -499,7 +497,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
                            list_Zeta_hat, list_Cov_zeta_hat, list_list_zeta_ellipse,
                            Sigma_q_nu_mu,mu_q_nu_mu, Sigma_q_nu_phi,mu_q_nu_phi,mu_q_zeta, Sigma_q_zeta, sigsq_eps,
                            lambda_q_sigsq_phi, lambda_q_a_phi, lambda_q_sigsq_mu, lambda_q_a_mu, lambda_q_sigsq_eps,
-                           lambda_q_a_eps, mu_q_b,Sigma_q_normal_b,mu_q_gamma, ELBO, n_g, time_g, C_g)
+                           lambda_q_a_eps, mu_q_b, Sigma_q_normal_b,mu_q_gamma, ELBO, i_iter, n_g, time_g, C_g)
 
 
 }
@@ -691,7 +689,7 @@ orthonormalise <- function(N, p, Q, L, time_g, C_g, # see what she has used?
     list_Y_hat[[i]] <- list_Y_low[[i]] <- list_Y_upp[[i]] <- vector("list", length = p)
 
     for (j in 1:p) {
-      sd_i_j <- sqrt(Reduce("+", lapply(1:Q, function(q) mu_q_b[j, q]^2 * list_var_vec[[q]][[i]])) + sigsq_eps[j])# B assumed to be known exactly (variance = b^T Psi^T Cov_zeta Psi b) so sqrt(b^2) for sd
+      sd_i_j <- sqrt(Reduce("+", lapply(1:Q, function(q) mu_q_b[j, q]^2 * list_var_vec[[q]][[i]])) + sigsq_eps[j])# B assumed to be known exactly (variance = b^T Phi^T Cov_zeta Phi b) so sqrt(b^2) for sd
 
 
       list_Y_hat[[i]][[j]] <- list_Y_mat[[j]][,i]

@@ -417,3 +417,82 @@ flip_sign <- function(vec_flip, list_Psi_hat, Zeta_hat, zeta_ellipse = NULL) {
 
   create_named_list(list_Psi_hat, Zeta_hat, zeta_ellipse)
 }
+
+
+match_factors <-function(b, mu_q_b, mu_q_gamma, list_Zeta_hat, list_list_Phi_hat) {
+
+  p <- nrow(B)
+  Q <- ncol(B)
+
+  true_contributions <- lapply(1:Q, function(q) which(B[, q] != 0))
+  inferred_contributions <- lapply(1:Q, function(q) which(mu_q_gamma[, q] > 0.5))
+
+  perm_factors <- prop_factors <- perm_sign <- rep (0, Q)
+  perm_mu_q_b <- perm_mu_q_gamma <- matrix (0, nrow = p, ncol = Q)
+  perm_list_Zeta_hat <- perm_list_list_Phi_hat <- vector("list", length = Q)
+
+  for (q in 1:Q) {
+
+    # is this loop needed? we could probably only use the one below.
+    for (q_tilde in 1:Q) {
+      if (all(true_contributions[[q]] %in% inferred_contributions[[q_tilde]])){
+        perm_factors[q] <- q_tilde
+        prop_factors[q] <- 1
+      }
+    }
+
+    if (perm_factors[q] == 0) { #The factor is not totally recovered.
+      shared_ele <-sapply(1:Q, function(q_tilde)
+        sum(sapply(true_contributions[q], function(e) e %in% inferred_contributions[[q_tilde]]))
+      )
+      perm_factors[q] <- which.max(shared_ele)
+      prop_factors[q] <- shared_ele[which.max(shared_ele)] / length(true_contributions[[q]])
+    }
+
+    perm_sign[q] <- ifelse(sign(B[true_contributions[[q]][1],q]) == sign(mu_q_b[true_contributions[[q]][1],perm_factors[q]]), 1, -1)
+    perm_mu_q_b[,q] <- perm_sign[q]*mu_q_b[,perm_factors[q]]
+    perm_mu_q_gamma[,q] <- mu_q_gamma[,perm_factors[q]]
+    perm_list_Zeta_hat[[q]] <- perm_sign[q]*list_Zeta_hat[[perm_factors[q]]]
+    perm_list_list_Phi_hat[[q]]<- list_list_Phi_hat[[perm_factors[q]]]
+  }
+
+  res<- create_named_list(perm_factors, prop_factors,
+                          perm_sign,perm_mu_q_b,
+                          perm_mu_q_gamma, perm_list_Zeta_hat,
+                          perm_list_list_Phi_hat)
+}
+
+
+#' @export
+#'
+match_sign_components <- function(Zeta, list_Zeta_hat, list_list_Phi_hat){
+
+  Q <- length(Zeta)
+  N <- nrow(Zeta[[1]])
+  L <- ncol(Zeta[[1]])
+
+  perm_list_Zeta_hat <- list_Zeta_hat
+  perm_list_list_Phi_hat <- list_list_Phi_hat
+
+  perm_matrix <- matrix(0, nrow= Q, ncol = L)
+  perm_sign_fpca <- matrix(0, nrow = Q, ncol = L)
+
+  for (q in 1:Q){
+    for (l in 1:L){
+      Zeta_lq <- sapply(1:N, function(i) Zeta[[q]][i, l])
+      #Zeta_hat_orth <- sapply(1:nrow(perm_list_Zeta_hat[[q]]),function(i) perm_list_Zeta_hat[[q]][i,l])
+      corr_zeta <- sapply(1:L, function(l_tilde)
+        sapply (1:Q, function(q_tilde)
+          cor(Zeta_lq, sapply(1:N, function(i) list_Zeta_hat[[q_tilde]][i,l_tilde]))))
+
+      corr_zeta[is.na(corr_zeta)] <- 0
+      q_tilde <- which(abs(corr_zeta) == max(abs(corr_zeta)), arr.ind = TRUE)[1,1]
+      l_tilde <- which(abs(corr_zeta) == max(abs(corr_zeta)), arr.ind = TRUE)[1,2]
+
+      perm_sign_fpca[q, l] <- sign(corr_zeta[q_tilde, l_tilde])
+      perm_list_Zeta_hat[[q]][, l] <- perm_sign_fpca[q,l]*list_Zeta_hat[[q_tilde]][, l_tilde]
+      perm_list_list_Phi_hat[[q]][, l]<- perm_sign_fpca[q,l]*list_list_Phi_hat[[q_tilde]][, l_tilde]
+    }
+  }
+  res <- create_named_list(perm_sign_fpca, perm_list_Zeta_hat, perm_list_list_Phi_hat)
+}

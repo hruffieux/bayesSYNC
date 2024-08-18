@@ -13,10 +13,10 @@ bayesSYNC(
   list_hyper = NULL,
   n_g = 1000,
   time_g = NULL,
-  Psi_g = NULL,
   tol_abs = 0.001,
   tol_rel = 1e-05,
   maxit = 500,
+  n_cpus = 1,
   verbose = TRUE,
   seed = NULL
 )
@@ -43,14 +43,13 @@ of observations for univariate or multivariate curves, respectively.}
 then \code{n_g} must be \code{NULL} as it will be taken to be
 \code{length(time_g)}.}
 
-\item{Psi_g}{Reference eigenfunctions (if available, e.g., in simulations)
-used to flip the sign of the resulting scores and eigenfunctions.}
-
 \item{tol_abs}{Tolerance on the absolute changes in the ELBO.}
 
 \item{tol_rel}{Tolerance on the relative changes in the ELBO.}
 
 \item{maxit}{Number of iterations for the mean-field variational Bayes algorithm. Default maxit = 500.}
+
+\item{n_cpus}{User-sepcieid number of CPU to be used for parallel execution. Default n_cpus = 1 for serial execution.}
 
 \item{verbose}{Boolean indicating whether messages should be printed during
 the run. Default is TRUE.}
