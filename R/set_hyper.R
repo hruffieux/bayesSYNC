@@ -23,17 +23,17 @@
 #'
 set_hyper <- function(sigma_beta = 1e5, A = 1e5, c_0 = 1, d_0 = 1) {
 
-  check_structure(sigma_beta, "vector", "double", c(1, 2))
+  check_structure(sigma_beta, "vector", "numeric", c(1, 2))
   check_positive(sigma_beta)
 
   if (length(sigma_beta) == 1) sigma_beta <- rep(sigma_beta, 2)
   Sigma_beta <- sigma_beta^2*diag(2)
 
-  check_structure(A, "vector", "double", 1)
+  check_structure(A, "vector", "numeric", 1)
   check_positive(A)
 
-  check_structure(c_0, "vector", "double", 1)
-  check_structure(d_0,"vector", "double", 1)
+  check_structure(c_0, "vector", "numeric", 1)
+  check_structure(d_0,"vector", "numeric", 1)
 
   sigma_zeta <- 1
   mu_beta <- rep(0, 2)
