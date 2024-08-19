@@ -419,7 +419,9 @@ flip_sign <- function(vec_flip, list_Psi_hat, Zeta_hat, zeta_ellipse = NULL) {
 }
 
 
-match_factors <-function(b, mu_q_b, mu_q_gamma, list_Zeta_hat, list_list_Phi_hat) {
+#' @export
+#'
+match_factors <-function(B, mu_q_b, mu_q_gamma, list_Zeta_hat, list_list_Phi_hat) {
 
   p <- nrow(B)
   Q <- ncol(B)
@@ -433,7 +435,7 @@ match_factors <-function(b, mu_q_b, mu_q_gamma, list_Zeta_hat, list_list_Phi_hat
 
   for (q in 1:Q) {
 
-    # is this loop needed? we could probably only use the one below.
+    # is this loop needed? we could probably only use the one below. do we need a stricter check? What if more than 1 factor has all true contrib in the inferred factor?
     for (q_tilde in 1:Q) {
       if (all(true_contributions[[q]] %in% inferred_contributions[[q_tilde]])){
         perm_factors[q] <- q_tilde
