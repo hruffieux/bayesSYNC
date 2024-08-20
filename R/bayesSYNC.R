@@ -37,7 +37,8 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
                       list_hyper = NULL,
                       n_g = 1000, time_g = NULL,
                       tol_abs = 1e-3,
-                      tol_rel = 1e-5, maxit = 500, n_cpus = 1, verbose = TRUE, seed = NULL) {
+                      tol_rel = 1e-5, maxit = 500, n_cpus = 1,
+                      verbose = TRUE, seed = NULL) {
 
   check_structure(seed, "vector", "numeric", 1, null_ok = TRUE)
   if (!is.null(seed)) {
@@ -70,8 +71,6 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
 
   check_structure(maxit, "vector", "numeric", 1)
   check_natural(maxit)
-
-  check_structure(verbose, "vector", "logical", 1)
 
   check_structure(verbose, "vector", "logical", 1)
 
@@ -125,17 +124,18 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
     stop("Variable names for each individual in time_obs must be the same as in Y.")
   }
 
+  debug <- TRUE # whether to throw an error when the ELBO is not increasing monotonically
 
-  bayesSYNC_core(N= N, p=p, L=L, Q=Q, K=K, C = C, Y = Y, list_hyper,
-                      time_obs = time_obs,n_g =n_g,
-                      time_g =time_g,C_g =C_g, tol_abs = tol_abs,
-                      tol_rel = tol_rel, maxit = maxit, n_cpus = n_cpus, verbose = verbose)
+  bayesSYNC_core(N = N, p=p, L=L, Q=Q, K=K, C = C, Y = Y, list_hyper,
+                 time_obs = time_obs, n_g =n_g, time_g = time_g, C_g = C_g,
+                 tol_abs = tol_abs, tol_rel = tol_rel, maxit = maxit,
+                 n_cpus = n_cpus, debug = debug, verbose = verbose)
 
 }
 
 
-bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
-                           time_g, C_g, tol_abs, tol_rel, maxit, n_cpus, verbose) {
+bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g,
+                           C_g, tol_abs, tol_rel, maxit, n_cpus, debug, verbose) {
 
   eps <- .Machine$double.eps^0.5
   eps_elbo <- 1e-11 # could probably be taken as eps, simply
@@ -190,7 +190,9 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
   ELBO <- NULL
   for(i_iter in 1:maxit) {
 
-    cat("Iteration", i_iter, "\n")
+    if (verbose) {
+      cat(paste0("Iteration ", format(i_iter), "... \n"))
+    }
 
     # Update of q(nu_mu):
 
@@ -456,28 +458,52 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g,
 
     ELBO_iter <- elbo_y + elbo_mu + elbo_b_g + elbo_omega + elbo_sig_phi + elbo_phi + elbo_zeta
 
+    if (verbose) {
+      cat(paste0("ELBO = ", format(ELBO_iter), "\n\n"))
+    }
+
     ELBO <- c(ELBO, ELBO_iter)
 
-    if (i_iter >1 && (ELBO[i_iter] - ELBO[i_iter-1]) < -eps){
-      stop(paste0("Error : THE ELBO IS DECREASING, difference: ", ELBO[i_iter] - ELBO[i_iter-1]))
-      # warning(paste0("Warning: THE ELBO IS DECREASING, difference: ", ELBO[i_iter] - ELBO[i_iter-1]))
-    }
     if (i_iter >1){
-      message(i_iter, ":", ELBO[i_iter] - ELBO[i_iter-1])
-    }
-    if (i_iter >1){
-      rel_converged <- (abs(ELBO[i_iter]/ELBO[i_iter-1] - 1) < tol_rel)
-      abs_converged <- ((ELBO[i_iter] - ELBO[i_iter-1])/N< tol_abs)
-    }
-    if(i_iter >1 && (rel_converged | abs_converged)) {
-      print(abs(ELBO[i_iter]/ELBO[i_iter-1] - 1))
-      # print(abs_converged)
-      break
+
+      ELBO_diff <- ELBO[i_iter] - ELBO[i_iter-1]
+
+      if (ELBO_diff < -eps){
+
+        if (debug) {
+          stop(paste0("ELBO not increasing monotonically. Difference last consecutive ELBO values: ", ELBO_diff, " Exit."))
+        } else {
+          warning(paste0("ELBO not increasing monotonically. Difference last consecutive ELBO values: ", ELBO_diff))
+        }
+      }
+
+      rel_converged <- (abs(ELBO[i_iter] / ELBO[i_iter-1] - 1) < tol_rel)
+      # abs_converged <- (ELBO_diff / N < tol_abs) # remove the / N
+      abs_converged <- (ELBO_diff < tol_abs)
+
+      if(rel_converged | abs_converged) {
+
+        mess_criterion_met <- paste0(ifelse(rel_converged, "Relative ", "Absolute "), "convergence criterion met. \n")
+
+        if (verbose) {
+          cat(paste0("Convergence obtained after ", format(i_iter), " iterations. \n",
+                     mess_criterion_met,
+                     "Optimal marginal log-likelihood variational lower bound ",
+                     "(ELBO) = ", format(ELBO[i_iter]), ". \n\n"))
+        }
+
+        break
+      } else if (i_iter == maxit) {
+        warning(paste0("Maximal number of iterations reached before convergence. Difference last consecutive ELBO values: ",
+                       ELBO_diff, " Exit."))
+      }
+
     }
 
 
   }
-  sigsq_eps <- lambda_q_sigsq_eps/(kappa_q_sigsq_eps-1)
+
+  sigsq_eps <- lambda_q_sigsq_eps/(kappa_q_sigsq_eps - 1)
 
   res_orth <- orthonormalise(N, p, Q, L, time_g, C_g, # see what she has used?
                              mu_q_nu_mu, # not used for the orthonormalisation
