@@ -530,9 +530,13 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
   res <- create_named_list(K, list_Y_hat, list_Y_low, list_Y_upp,
                            list_mu_hat, list_list_Phi_hat,
                            list_Zeta_hat, list_Cov_zeta_hat, list_list_zeta_ellipse,
-                           Sigma_q_nu_mu,mu_q_nu_mu, Sigma_q_nu_phi,mu_q_nu_phi,mu_q_zeta, Sigma_q_zeta, sigsq_eps,
-                           lambda_q_sigsq_phi, lambda_q_a_phi, lambda_q_sigsq_mu, lambda_q_a_mu, lambda_q_sigsq_eps,
-                           lambda_q_a_eps, mu_q_b, Sigma_q_normal_b,mu_q_gamma, ELBO, i_iter, n_g, time_g, C_g)
+                           # Sigma_q_nu_mu,mu_q_nu_mu, Sigma_q_nu_phi,mu_q_nu_phi,mu_q_zeta, Sigma_q_zeta, sigsq_eps,
+                           # lambda_q_sigsq_phi, lambda_q_a_phi, lambda_q_sigsq_mu, lambda_q_a_mu, lambda_q_sigsq_eps,
+                           # lambda_q_a_eps, Sigma_q_normal_b,
+                           mu_q_b,
+                           mu_q_gamma,
+                           # time_g, C_g,
+                           ELBO, i_iter, n_g)
 
 
 }
