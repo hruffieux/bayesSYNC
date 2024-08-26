@@ -20,6 +20,7 @@ License: GPL (>= 3)
 Encoding: UTF-8
 Imports:
     ellipse,
+    gtools,
     lattice,
     magic,
     MASS,

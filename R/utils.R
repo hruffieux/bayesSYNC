@@ -418,54 +418,58 @@ flip_sign <- function(vec_flip, list_Psi_hat, Zeta_hat, zeta_ellipse = NULL) {
   create_named_list(list_Psi_hat, Zeta_hat, zeta_ellipse)
 }
 
+# Function to compute the Frobenius norm between two matrices
+frobenius_norm <- function(A, B) {
+  sqrt(sum((A - B)^2))
+}
 
 #' @export
 #'
-match_factors <-function(B, mu_q_b, mu_q_gamma, list_Zeta_hat, list_list_Phi_hat) {
+match_factors <- function(B, B_hat, ppi, list_Zeta_hat, list_list_Phi_hat) {
 
-  p <- nrow(B)
   Q <- ncol(B)
+  true_pat <- 1*(abs(B) > 0)
 
-  true_contributions <- lapply(1:Q, function(q) which(B[, q] != 0))
-  inferred_contributions <- lapply(1:Q, function(q) which(mu_q_gamma[, q] > 0.5))
+  # Generate all possible permutations of column indices
+  perms <- gtools::permutations(Q, Q)
 
-  perm_factors <- prop_factors <- perm_sign <- rep (0, Q)
-  perm_mu_q_b <- perm_mu_q_gamma <- matrix (0, nrow = p, ncol = Q)
-  perm_list_Zeta_hat <- perm_list_list_Phi_hat <- vector("list", length = Q)
+  # Initialize minimum distance and best permutation
+  min_distance <- Inf
+  best_perm <- NULL
 
-  for (q in 1:Q) {
+  # Iterate over all permutations to find the best one
+  for (i in 1:nrow(perms)) {
+    permuted_ppi <- ppi[, perms[i, ]]
+    distance <- frobenius_norm(true_pat, permuted_ppi)
 
-    # is this loop needed? we could probably only use the one below. do we need a stricter check? What if more than 1 factor has all true contrib in the inferred factor?
-    for (q_tilde in 1:Q) {
-      if (all(true_contributions[[q]] %in% inferred_contributions[[q_tilde]])){
-        perm_factors[q] <- q_tilde
-        prop_factors[q] <- 1
-      }
+    if (distance < min_distance) {
+      min_distance <- distance
+      best_perm <- perms[i, ]
     }
-
-    if (perm_factors[q] == 0) { #The factor is not totally recovered.
-      shared_ele <-sapply(1:Q, function(q_tilde)
-        sum(sapply(true_contributions[q], function(e) e %in% inferred_contributions[[q_tilde]]))
-      )
-      perm_factors[q] <- which.max(shared_ele)
-      prop_factors[q] <- shared_ele[which.max(shared_ele)] / length(true_contributions[[q]])
-    }
-
-    perm_sign[q] <- ifelse(sign(B[true_contributions[[q]][1],q]) == sign(mu_q_b[true_contributions[[q]][1],perm_factors[q]]), 1, -1)
-    perm_mu_q_b[,q] <- perm_sign[q]*mu_q_b[,perm_factors[q]]
-    perm_mu_q_gamma[,q] <- mu_q_gamma[,perm_factors[q]]
-    perm_list_Zeta_hat[[q]] <- perm_sign[q]*list_Zeta_hat[[perm_factors[q]]]
-    perm_list_list_Phi_hat[[q]]<- list_list_Phi_hat[[perm_factors[q]]]
   }
 
-  res<- create_named_list(perm_factors, prop_factors,
-                          perm_sign,perm_mu_q_b,
-                          perm_mu_q_gamma, perm_list_Zeta_hat,
+  # Reorder B with the best permutation found
+  perm_ppi <- ppi[, best_perm]
+  perm_B_hat <- B_hat[, best_perm]
+
+  perm_sign <- rep(NA, Q)
+  perm_list_Zeta_hat <- perm_list_list_Phi_hat <- vector("list", Q)
+  for (q in 1:Q) {
+    perm_sign[q] <- ifelse(frobenius_norm(B[,q], perm_B_hat[,q]) > frobenius_norm(B[,q], -perm_B_hat[,q]), -1, 1)
+    perm_B_hat[,q] <- perm_sign[q]*perm_B_hat[,q]
+
+    perm_list_Zeta_hat[[q]] <- perm_sign[q]*list_Zeta_hat[[best_perm[q]]]
+    perm_list_list_Phi_hat[[q]] <- list_list_Phi_hat[[best_perm[q]]]
+  }
+
+  res<- create_named_list(best_perm, perm_sign,
+                          perm_B_hat, perm_ppi,
+                          perm_list_Zeta_hat,
                           perm_list_list_Phi_hat)
 }
 
 
-#' @export
+#' @export # we also potentially need to swap the signs of zeta and phi for a given component
 #'
 match_sign_components <- function(Zeta, list_Zeta_hat, list_list_Phi_hat){
 

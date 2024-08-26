@@ -9,6 +9,7 @@
 #' @import lattice
 # #' @importFrom lattice bwplot, panel.abline, panel.bwplot, strip.default, xyplot
 #' @importFrom graphics legend lines par abline axis points
+#' @importFrom gtools permutations
 #' @importFrom magic adiag
 #' @importFrom MASS mvrnorm
 #' @importFrom matrixcalc duplication.matrix
