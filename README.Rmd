@@ -83,7 +83,6 @@ if(!require(remotes)) install.packages("remotes")
 remotes::install_github("hruffieux/bayesSYNC")
 ```
 
-
 ### Authors and license
 
 Selima Jaoua (University of Zürich, Switzerland), Daniel Temko \& Hélène Ruffieux (University of Cambridge, UK).
