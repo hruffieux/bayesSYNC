@@ -25,6 +25,7 @@ Imports:
     magic,
     MASS,
     matrixcalc,
+    matrixStats,
     pracma,
     stats,
     splines,

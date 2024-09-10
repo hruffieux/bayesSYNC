@@ -421,7 +421,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
     #   log_det_j_obj <- determinant(Sigma_q_nu_mu[[j]], logarithm = TRUE)
     #   log_det_j_obj$modulus * log_det_j_obj$sign - crossprod(mu_q_nu_mu[[j]], inv_Sigma_q_nu_mu[[j]] %*% mu_q_nu_mu[[j]]) - tr(inv_Sigma_q_nu_mu[[j]] %*% Sigma_q_nu_mu[[j]])}, mc.cores = n_cpus))
 
-    elbo_mu <- -p*log(sigma_zeta) + sum(0.5*vec_term_list_mu - 0.5*K*mu_q_log_sigsq_mu + K/2 + 1 +
+    elbo_mu <- -p*log(prod(diag(Sigma_beta)))/2 + sum(0.5*vec_term_list_mu - 0.5*K*mu_q_log_sigsq_mu + K/2 + 1 +
       K/2*mu_q_log_sigsq_mu - mu_q_recip_sigsq_mu*(mu_q_recip_a_mu-lambda_q_sigsq_mu)-
       0.5*mu_q_log_a_mu -kappa_q_sigsq_mu*log(lambda_q_sigsq_mu)-lgamma(0.5)+lgamma(kappa_q_sigsq_mu)+
       (3/2)*mu_q_log_a_mu - mu_q_recip_a_mu*(1/A^2 - lambda_q_a_mu) - log(lambda_q_a_mu) - lgamma(0.5) + lgamma(1) + 0.5*log(1/A^2)+
@@ -447,7 +447,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
       log_det_q_l_obj <- determinant(Sigma_q_nu_phi[[q]][[l]], logarithm = TRUE)
       log_det_q_l_obj$modulus * log_det_q_l_obj$sign - crossprod(mu_q_nu_phi[[q]][,l], inv_Sigma_q_nu_phi[[q]][[l]] %*% mu_q_nu_phi[[q]][,l]) - tr(inv_Sigma_q_nu_phi[[q]][[l]] %*% Sigma_q_nu_phi[[q]][[l]])}))
 
-    elbo_phi <- -Q*L*log(sigma_zeta) + sum(0.5*mat_term_list_phi - (K/2)*mu_q_log_sigsq_phi + K/2 + 1)
+    elbo_phi <- -Q*L*log(prod(diag(Sigma_beta)))/2 + sum(0.5*mat_term_list_phi - (K/2)*mu_q_log_sigsq_phi + K/2 + 1)
 
     elbo_zeta <- sum(sapply(1:Q, function(q)
       sum(sapply(1:N, function (i){
@@ -478,8 +478,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
       }
 
       rel_converged <- (abs(ELBO[i_iter] / ELBO[i_iter-1] - 1) < tol_rel)
-      # abs_converged <- (ELBO_diff / N < tol_abs) # remove the / N
-      abs_converged <- (ELBO_diff < tol_abs)
+      abs_converged <- (abs(ELBO_diff) < tol_abs)
 
       if(rel_converged | abs_converged) {
 
@@ -530,6 +529,9 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
   B_hat <- mu_q_b
   ppi <- mu_q_gamma
 
+  # probabilities of activity of each factor:
+  factor_ppi <- 1 - colProds(1-ppi) # probability that each factor contains at least one contribution by a variable
+
   res <- create_named_list(K, list_Y_hat, list_Y_low, list_Y_upp,
                            list_mu_hat, list_list_Phi_hat,
                            list_Zeta_hat, list_Cov_zeta_hat, list_list_zeta_ellipse,
@@ -538,6 +540,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
                            # lambda_q_a_eps, Sigma_q_normal_b,
                            B_hat,
                            ppi,
+                           factor_ppi,
                            # time_g, C_g,
                            ELBO, i_iter, n_g)
 

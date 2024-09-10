@@ -423,15 +423,54 @@ frobenius_norm <- function(A, B) {
   sqrt(sum((A - B)^2))
 }
 
-#' @export
-#'
-match_factors <- function(B, B_hat, ppi, list_Zeta_hat, list_list_Phi_hat) {
 
-  Q <- ncol(B)
+#' @export
+match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat, list_list_Phi_hat) {
+
+  perm_factor <- match_factors(B, B_hat, ppi, factor_ppi, list_Zeta_hat, list_list_Phi_hat)
+
+  best_perm <- perm_factor$best_perm
+  perm_sign_factor <- perm_factor$perm_sign_factor
+
+  perm_B_hat <- perm_factor$perm_B_hat
+  perm_ppi <- perm_factor$perm_ppi
+  perm_factor_ppi <- perm_factor$perm_factor_ppi
+  perm_list_Zeta_hat <- perm_factor$perm_list_Zeta_hat
+  perm_list_list_Phi_hat <- perm_factor$perm_list_list_Phi_hat
+
+  perm_B_hat_untrimmed <- perm_factor$perm_B_hat_untrimmed
+  perm_ppi_untrimmed <- perm_factor$perm_ppi_untrimmed
+  perm_list_Zeta_hat_untrimmed <- perm_factor$perm_list_Zeta_hat_untrimmed
+  perm_list_list_Phi_hat_untrimmed <- perm_factor$perm_list_list_Phi_hat_untrimmed
+
+  perm_sign <- match_sign_components(Zeta, perm_list_Zeta_hat, perm_list_list_Phi_hat)
+
+  perm_sign_fpca <- perm_factor$perm_sign_fpca
+
+  perm_list_Zeta_hat <- perm_sign$perm_list_Zeta_hat
+  perm_list_list_Phi_hat <- perm_sign$perm_list_list_Phi_hat
+
+  create_named_list(best_perm, perm_sign_factor, perm_sign_fpca, perm_factor_ppi,
+                    perm_B_hat, perm_ppi, perm_list_Zeta_hat, perm_list_list_Phi_hat,
+                    perm_B_hat_untrimmed, perm_ppi_untrimmed, perm_list_Zeta_hat_untrimmed, perm_list_list_Phi_hat_untrimmed)
+
+}
+
+#
+match_factors <- function(B, B_hat, ppi, factor_ppi, list_Zeta_hat, list_list_Phi_hat) {
+
+  Q_true <- ncol(B)
+  Q <- ncol(B_hat)
+
+  if (Q_true > Q) {
+    stop("The number of estimated factors, Q, must be larger than the number of true factors.")
+  } else if (Q_true < Q) {
+    warning("Dropping superfluous factors based on the true loadings.")
+  }
   true_pat <- 1*(abs(B) > 0)
 
   # Generate all possible permutations of column indices
-  perms <- gtools::permutations(Q, Q)
+  perms <- gtools::permutations(Q, Q_true)
 
   # Initialize minimum distance and best permutation
   min_distance <- Inf
@@ -439,7 +478,7 @@ match_factors <- function(B, B_hat, ppi, list_Zeta_hat, list_list_Phi_hat) {
 
   # Iterate over all permutations to find the best one
   for (i in 1:nrow(perms)) {
-    permuted_ppi <- ppi[, perms[i, ]]
+    permuted_ppi <- ppi[, perms[i, ], drop = F]
     distance <- frobenius_norm(true_pat, permuted_ppi)
 
     if (distance < min_distance) {
@@ -449,46 +488,68 @@ match_factors <- function(B, B_hat, ppi, list_Zeta_hat, list_list_Phi_hat) {
   }
 
   # Reorder B with the best permutation found
-  perm_ppi <- ppi[, best_perm]
-  perm_B_hat <- B_hat[, best_perm]
+  perm_ppi <- ppi[, best_perm, drop = F]
+  perm_B_hat <- B_hat[, best_perm, drop = F]
 
-  perm_sign <- rep(NA, Q)
-  perm_list_Zeta_hat <- perm_list_list_Phi_hat <- vector("list", Q)
+  perm_sign_factor <- rep(NA, Q_true)
+  perm_list_Zeta_hat <- perm_list_list_Phi_hat <- vector("list", Q_true)
+  perm_list_Zeta_hat_untrimmed <- perm_list_list_Phi_hat_untrimmed <- vector("list", Q)
   for (q in 1:Q) {
-    perm_sign[q] <- ifelse(frobenius_norm(B[,q], perm_B_hat[,q]) > frobenius_norm(B[,q], -perm_B_hat[,q]), -1, 1)
-    perm_B_hat[,q] <- perm_sign[q]*perm_B_hat[,q]
 
-    perm_list_Zeta_hat[[q]] <- perm_sign[q]*list_Zeta_hat[[best_perm[q]]]
-    perm_list_list_Phi_hat[[q]] <- list_list_Phi_hat[[best_perm[q]]]
+    if (q <= Q_true) {
+      perm_sign_factor[q] <- ifelse(frobenius_norm(B[,q], perm_B_hat[,q]) > frobenius_norm(B[,q], -perm_B_hat[,q]), -1, 1)
+      perm_B_hat[,q] <- perm_sign_factor[q]*perm_B_hat[,q]
+
+      perm_list_Zeta_hat[[q]] <- perm_list_Zeta_hat_untrimmed[[q]] <- perm_sign_factor[q]*list_Zeta_hat[[best_perm[q]]]
+      perm_list_list_Phi_hat[[q]] <- perm_list_list_Phi_hat_untrimmed[[q]] <- list_list_Phi_hat[[best_perm[q]]]
+    } else {
+      perm_list_Zeta_hat_untrimmed[[q]] <- list_Zeta_hat[[setdiff(1:Q, best_perm)[q-Q_true]]]
+      perm_list_list_Phi_hat_untrimmed[[q]] <- list_list_Phi_hat[[setdiff(1:Q, best_perm)[q-Q_true]]]
+    }
   }
 
-  res<- create_named_list(best_perm, perm_sign,
-                          perm_B_hat, perm_ppi,
-                          perm_list_Zeta_hat,
-                          perm_list_list_Phi_hat)
+  perm_ppi_untrimmed <- cbind(perm_ppi, ppi[, -best_perm, drop = F])
+  perm_B_hat_untrimmed <- cbind(perm_B_hat, B_hat[, -best_perm, drop = F])
+  perm_factor_ppi <- c(factor_ppi[best_perm], factor_ppi[-best_perm]) # posterior probabilities of inclusion of the permuted factors
+
+  create_named_list(best_perm, perm_sign_factor, perm_factor_ppi,
+                    perm_B_hat_untrimmed, perm_ppi_untrimmed,
+                    perm_B_hat, perm_ppi,
+                    perm_list_Zeta_hat, perm_list_list_Phi_hat,
+                    perm_list_Zeta_hat_untrimmed, perm_list_list_Phi_hat_untrimmed)
 }
 
 
-#' @export # we also potentially need to swap the signs of zeta and phi for a given component
-#'
-match_sign_components <- function(Zeta, list_Zeta_hat, list_list_Phi_hat){
+# we also potentially need to swap the signs of zeta and phi for a given component
+#
+match_sign_components <- function(Zeta,
+                                  list_Zeta_hat, # trimmed versions of the estimate, i.e., after discarding the irrelevant factors using match_factors
+                                  list_list_Phi_hat){
 
-  Q <- length(Zeta)
+  Q_true <- length(Zeta)
   N <- nrow(Zeta[[1]])
-  L <- ncol(Zeta[[1]])
+
+  L_true <- ncol(Zeta[[1]])
+  L <- ncol(list_Zeta_hat[[1]])
+
+  if (L_true > L) {
+    stop("The number of estimated components, L, must be larger than the number of true components.")
+  } else if (L_true < L) {
+    warning("Number of estimated components L is greater than true number of components L_true. \n Swapping sign of the first L_true components only.")
+  }
 
   perm_list_Zeta_hat <- list_Zeta_hat
   perm_list_list_Phi_hat <- list_list_Phi_hat
 
-  perm_matrix <- matrix(0, nrow= Q, ncol = L)
-  perm_sign_fpca <- matrix(0, nrow = Q, ncol = L)
+  perm_matrix <- matrix(0, nrow= Q_true, ncol = L_true)
+  perm_sign_fpca <- matrix(0, nrow = Q_true, ncol = L_true)
 
-  for (q in 1:Q){
-    for (l in 1:L){
+  for (q in 1:Q_true){
+    for (l in 1:L_true){
       Zeta_lq <- sapply(1:N, function(i) Zeta[[q]][i, l])
       #Zeta_hat_orth <- sapply(1:nrow(perm_list_Zeta_hat[[q]]),function(i) perm_list_Zeta_hat[[q]][i,l])
-      corr_zeta <- sapply(1:L, function(l_tilde)
-        sapply (1:Q, function(q_tilde)
+      corr_zeta <- sapply(1:L_true, function(l_tilde)
+        sapply (1:Q_true, function(q_tilde)
           cor(Zeta_lq, sapply(1:N, function(i) list_Zeta_hat[[q_tilde]][i,l_tilde]))))
 
       corr_zeta[is.na(corr_zeta)] <- 0
