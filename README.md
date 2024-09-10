@@ -32,12 +32,13 @@ challenging. **bayesSYNC** addresses this challenge by introducing a
 Bayesian framework that combines latent factor modelling with functional
 principal component analysis (FPCA).
 
-This approach allows for: \* capturing correlations across both
-variables and time; \* representing high-dimensional curves using a
-small number of FPCA expansions, which reflect underlying latent
-factors; \* modelling individual variability through functional
-principal components, each characterised by smoothly varying temporal
-functions.
+This approach allows for:
+
+- capturing correlations across both variables and time;
+- representing high-dimensional curves using a small number of FPCA
+  expansions, which reflect underlying latent factors;
+- modelling individual variability through functional principal
+  components, each characterised by smoothly varying temporal functions.
 
 For example, in a biological context, the variables might represent gene
 expression levels, and the latent factors could correspond to biological
@@ -45,18 +46,20 @@ pathways. **bayesSYNC** can help elucidate how groups of genes work
 together over time, providing insights into the biological processes
 underlying diseases.
 
-**Key features:** \* *Variable-specific loadings*: estimation of
-loadings for each variable that contributes to the FPCA expansions,
-providing insights into how subsets of variables influence latent
-factors. \* *Subject-specific component scores*: estimation of
-subject-specific scores for each functional principal component,
-allowing for personalised analyses of temporal dynamics. \* *Variational
-inference*: variational inference algorithm with analytical updates,
-ensuring both computational efficiency and robust uncertainty
-quantification. \* *Scalability*: the method is capable of handling
-realistic data sizes (e.g., longitudinal measurements for each of ~20
-000 genes in hundreds of individuals), making it practical for
-large-scale studies.
+**Key features:**
+
+- *Variable-specific loadings*: estimation of loadings for each variable
+  that contributes to the FPCA expansions, providing insights into how
+  subsets of variables influence latent factors.
+- *Subject-specific component scores*: estimation of subject-specific
+  scores for each functional principal component, allowing for
+  personalised analyses of temporal dynamics.
+- *Variational inference*: variational inference algorithm with
+  analytical updates, ensuring both computational efficiency and robust
+  uncertainty quantification.
+- *Scalability*: the method is capable of handling realistic data sizes
+  (e.g., longitudinal measurements for each of ~20 000 genes in hundreds
+  of individuals), making it practical for large-scale studies.
 
 ### Warning
 
