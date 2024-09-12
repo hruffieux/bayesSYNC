@@ -18,7 +18,8 @@ bayesSYNC(
   maxit = 500,
   n_cpus = 1,
   verbose = TRUE,
-  seed = NULL
+  seed = NULL,
+  show_factor_ppi_progress = FALSE
 )
 }
 \arguments{
@@ -55,6 +56,9 @@ then \code{n_g} must be \code{NULL} as it will be taken to be
 the run. Default is TRUE.}
 
 \item{seed}{User-specified seed for reproducibility.}
+
+\item{show_factor_ppi_progress}{Whether to show a plot of the factor posterior
+probabilities of inclusion as the algorithm progresses. Default is FALSE.}
 }
 \value{
 An object containing the resulting estimates.
