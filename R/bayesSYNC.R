@@ -23,6 +23,8 @@
 #' @param verbose Boolean indicating whether messages should be printed during
 #'                the run. Default is TRUE.
 #' @param seed User-specified seed for reproducibility.
+#' @param show_factor_ppi_progress Whether to show a plot of the factor posterior
+#'        probabilities of inclusion as the algorithm progresses. Default is FALSE.
 #'
 #' @return An object containing the resulting estimates.
 #'
@@ -38,7 +40,8 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
                       n_g = 1000, time_g = NULL,
                       tol_abs = 1e-3,
                       tol_rel = 1e-5, maxit = 500, n_cpus = 1,
-                      verbose = TRUE, seed = NULL) {
+                      verbose = TRUE, seed = NULL,
+                      show_factor_ppi_progress = FALSE) {
 
   check_structure(seed, "vector", "numeric", 1, null_ok = TRUE)
   if (!is.null(seed)) {
@@ -124,18 +127,20 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
     stop("Variable names for each individual in time_obs must be the same as in Y.")
   }
 
-  debug <- TRUE # whether to throw an error when the ELBO is not increasing monotonically
+  debug <- F # whether to throw an error when the ELBO is not increasing monotonically
 
   bayesSYNC_core(N = N, p=p, L=L, Q=Q, K=K, C = C, Y = Y, list_hyper,
                  time_obs = time_obs, n_g =n_g, time_g = time_g, C_g = C_g,
                  tol_abs = tol_abs, tol_rel = tol_rel, maxit = maxit,
-                 n_cpus = n_cpus, debug = debug, verbose = verbose)
+                 n_cpus = n_cpus, debug = debug, verbose = verbose,
+                 show_factor_ppi_progress = show_factor_ppi_progress)
 
 }
 
 
 bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g,
-                           C_g, tol_abs, tol_rel, maxit, n_cpus, debug, verbose) {
+                           C_g, tol_abs, tol_rel, maxit, n_cpus, debug, verbose,
+                           show_factor_ppi_progress) {
 
   eps <- .Machine$double.eps^0.5
   eps_elbo <- 1e-11 # could probably be taken as eps, simply
@@ -153,7 +158,9 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
   inv_Sigma_zeta <- 1/sigma_zeta^2*diag(L)
   inv_Sigma_beta <- solve(Sigma_beta)
 
-  mu_q_zeta <- lapply(1:Q, function(q) matrix(0.5, nrow = N, ncol = L))
+  # mu_q_zeta <- lapply(1:Q, function(q) matrix(0.5, nrow = N, ncol = L)) # <--- SJ's implementation
+  # mu_q_zeta <- lapply(1:Q, function(q) matrix(0, nrow = N, ncol = L)) # can trigger decreasing ELBO as FPCA expansions might not be effectively learnt
+  mu_q_zeta <- lapply(1:Q, function(q) matrix(rnorm(N*L, mean = 0, sd = 1), nrow = N, ncol = L))
   Sigma_q_zeta <- lapply(1:Q, function(q) lapply(1:N, function(i) diag(L)))
 
   mu_q_recip_sigsq_mu  <- mu_q_recip_sigsq_eps <- rep(1, p)
@@ -163,11 +170,15 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
   kappa_q_a_mu <- kappa_q_a_eps <- kappa_q_a_phi <- 1
   kappa_q_sigsq_eps <- sum_obs/2 + 0.5
 
-  mu_q_normal_b <- matrix(rnorm(p*Q, 0, 1), nrow = p, ncol = Q)
+  mu_q_normal_b <- matrix(rnorm(p*Q), nrow = p, ncol = Q)
   mu_q_b <- mu_q_normal_b
-  Sigma_q_normal_b <- mu_q_gamma <- matrix(1, nrow= p, ncol= Q)
+  Sigma_q_normal_b <- mu_q_gamma <- matrix(1, nrow= p, ncol= Q) # # <--- SJ's implementation - start with all the variables contributing to all the factors in order to initiate the learning of the FPCA expansions
+  # Sigma_q_normal_b <- matrix(1, nrow = p, ncol = Q)
+  # mu_q_gamma <- matrix(0.5, nrow = p, ncol = Q)
 
-  mu_q_nu_phi <- lapply(1:Q, function(q) matrix(0.5, nrow = K+2, ncol = L))
+  # mu_q_nu_phi <- lapply(1:Q, function(q) matrix(0.5, nrow = K+2, ncol = L)) # <--- SJ's implementation
+  # mu_q_nu_phi <- lapply(1:Q, function(q) matrix(0, nrow = K+2, ncol = L)) # can trigger decreasing ELBO as FPCA expansions might not be effectively learnt
+  mu_q_nu_phi <- lapply(1:Q, function(q) matrix(rnorm((K+2)*L), nrow = K+2, ncol = L))
   mu_q_recip_a_mu <- mu_q_recip_a_eps <- rep(1, p)
   mu_q_recip_a_phi <- matrix(1, nrow = Q, ncol = L)
 
@@ -188,6 +199,9 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
   Sigma_q_nu_phi <- lapply(1:Q, function(q) lapply(1:L, function(i) matrix(NA, nrow = K+2, ncol = K+2)))
 
   ELBO <- NULL
+  if (show_factor_ppi_progress) {
+    factor_ppi_progress <- NULL
+  }
   for(i_iter in 1:maxit) {
 
     if (verbose) {
@@ -393,6 +407,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
       # don't move outside the for(q in 1:Q) loop as used in the update for sum_mu_q, leads to a less efficient scheme if outside
       Sigma_q_normal_b[,q] <- 1/(mu_q_recip_sigsq_eps * rs_tr_qi[q] + 1)
       mu_q_normal_b[,q] <- Sigma_q_normal_b[,q]*mu_q_recip_sigsq_eps*sum_mu_q
+
       mu_q_gamma[,q] <- 1 / (1 + sqrt(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1) *
                            exp(mu_q_log_1_omega[q]-mu_q_log_omega[q] -
                                  0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)))
@@ -407,6 +422,16 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
 
     inv_Sigma_q_nu_phi <- parallel::mclapply(1:Q, function(q) lapply(1:L, function(l) blkdiag(inv_Sigma_beta,
                                                                                               mu_q_recip_sigsq_phi[q,l]*diag(K))), mc.cores = n_cpus)
+
+
+    if (show_factor_ppi_progress) {
+      factor_ppi_progress <- rbind(factor_ppi_progress, 1 - colProds(1-mu_q_gamma))
+      par(mfrow= c(Q,1))
+      for (q in 1:Q) {
+        plot(factor_ppi_progress[,q], type = "o", pch = 20, ylim = c(0, 1),
+             xlab = "Iteration", ylab = "Max factor PPI", main = paste0("Factor q = ", q))
+      }
+    }
 
     # COMPUTE ELBO
     #
@@ -541,7 +566,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
                            B_hat,
                            ppi,
                            factor_ppi,
-                           # time_g, C_g,
+                           time_g, # C_g,
                            ELBO, i_iter, n_g)
 
 
