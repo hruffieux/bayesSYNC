@@ -557,6 +557,11 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
   # probabilities of activity of each factor:
   factor_ppi <- 1 - colProds(1-ppi) # probability that each factor contains at least one contribution by a variable
 
+
+  list_eigenvalues <- lapply(list_Zeta_hat, function(Zeta_hat) apply(Zeta_hat, 2, function(vv) var(vv)))
+  list_cumulated_pve <- lapply(list_eigenvalues, function(eigenvalues) cumsum(eigenvalues) / sum(eigenvalues) * 100)
+
+
   res <- create_named_list(K, list_Y_hat, list_Y_low, list_Y_upp,
                            list_mu_hat, list_list_Phi_hat,
                            list_Zeta_hat, list_Cov_zeta_hat, list_list_zeta_ellipse,
@@ -566,6 +571,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
                            B_hat,
                            ppi,
                            factor_ppi,
+                           list_cumulated_pve,
                            time_g, # C_g,
                            ELBO, i_iter, n_g)
 
