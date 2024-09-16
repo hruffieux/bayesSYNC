@@ -23,6 +23,10 @@
 #' @param verbose Boolean indicating whether messages should be printed during
 #'                the run. Default is TRUE.
 #' @param seed User-specified seed for reproducibility.
+#' @param bool_scale Whether to standardise the variables so the variables are on a
+#'        similar scale. The per-variable within-individual mean and sd are first
+#'        computed, their average across individuals are obtained, and used to
+#'        scale the measurements. Default is TRUE.
 #' @param show_factor_ppi_progress Whether to show a plot of the factor posterior
 #'        probabilities of inclusion as the algorithm progresses. Default is FALSE.
 #'
@@ -41,6 +45,7 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
                       tol_abs = 1e-3,
                       tol_rel = 1e-5, maxit = 500, n_cpus = 1,
                       verbose = TRUE, seed = NULL,
+                      bool_scale = TRUE,
                       show_factor_ppi_progress = FALSE) {
 
   check_structure(seed, "vector", "numeric", 1, null_ok = TRUE)
@@ -105,6 +110,16 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
   if (show_factor_ppi_progress && Q >= 20) {
     warning("show_factor_ppi_progress is set to FALSE as Q is too large for display.")
     show_factor_ppi_progress <- FALSE
+  }
+
+  if (bool_scale) {
+    mean_per_subject <- sapply(1:p, function(j) sapply(1:N, function(i) mean(Y[[i]][[j]])))
+    sd_per_subject <- sapply(1:p, function(j) sapply(1:N, function(i) sd(Y[[i]][[j]])))
+
+    mean_mean_across_subjects <- colMeans(mean_per_subject)
+    mean_sd_across_subjects <- colMeans(sd_per_subject)
+
+    Y <- lapply(1:N, function(i) lapply(1:p, function(j) (Y[[i]][[j]] - mean_mean_across_subjects[j]) / mean_sd_across_subjects[j]))
   }
 
   grid_obj <- get_grid_objects(time_obs, K, n_g = n_g, time_g = time_g,
@@ -432,7 +447,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
     if (show_factor_ppi_progress) {
       factor_ppi_progress <- rbind(factor_ppi_progress, 1 - colProds(1-mu_q_gamma))
 
-      disp <- Q %/% 5 + 1
+      disp <- Q %/% 5 + 1 # integer division
       par(mfrow= c(ceiling(Q/disp), disp))
       for (q in 1:Q) {
         plot(factor_ppi_progress[,q], type = "o", pch = 20, ylim = c(0, 1),

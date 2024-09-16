@@ -19,6 +19,7 @@ bayesSYNC(
   n_cpus = 1,
   verbose = TRUE,
   seed = NULL,
+  bool_scale = TRUE,
   show_factor_ppi_progress = FALSE
 )
 }
@@ -56,6 +57,11 @@ then \code{n_g} must be \code{NULL} as it will be taken to be
 the run. Default is TRUE.}
 
 \item{seed}{User-specified seed for reproducibility.}
+
+\item{bool_scale}{Whether to standardise the variables so the variables are on a
+similar scale. The per-variable within-individual mean and sd are first
+computed, their average across individuals are obtained, and used to
+scale the measurements. Default is TRUE.}
 
 \item{show_factor_ppi_progress}{Whether to show a plot of the factor posterior
 probabilities of inclusion as the algorithm progresses. Default is FALSE.}

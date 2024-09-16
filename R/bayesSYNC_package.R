@@ -16,6 +16,6 @@
 #' @importFrom matrixStats colProds
 #' @importFrom pracma blkdiag
 #' @importFrom splines spline.des
-#' @importFrom stats var cov cor dnorm median pnorm qnorm quantile rbinom rnorm runif setNames
+#' @importFrom stats sd var cov cor dnorm median pnorm qnorm quantile rbinom rnorm runif setNames
 #' @importFrom utils read.table
 NULL
