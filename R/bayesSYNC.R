@@ -584,7 +584,8 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
   list_cumulated_pve <- lapply(list_eigenvalues, function(eigenvalues) cumsum(eigenvalues) / sum(eigenvalues) * 100)
 
 
-  res <- create_named_list(K, list_Y_hat, list_Y_low, list_Y_upp,
+  res <- create_named_list(Y, # may be standardised now
+                           K, list_Y_hat, list_Y_low, list_Y_upp,
                            list_mu_hat, list_list_Phi_hat,
                            list_Zeta_hat, list_Cov_zeta_hat, list_list_zeta_ellipse,
                            # Sigma_q_nu_mu,mu_q_nu_mu, Sigma_q_nu_phi,mu_q_nu_phi,mu_q_zeta, Sigma_q_zeta, sigsq_eps,
