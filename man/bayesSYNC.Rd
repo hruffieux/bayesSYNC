@@ -58,10 +58,9 @@ the run. Default is TRUE.}
 
 \item{seed}{User-specified seed for reproducibility.}
 
-\item{bool_scale}{Whether to standardise the variables so the variables are on a
-similar scale. The per-variable within-individual mean and sd are first
-computed, their average across individuals are obtained, and used to
-scale the measurements. Default is TRUE.}
+\item{bool_scale}{Whether to standardise the variables. The per-variable
+within-individual means are first computed, their mean and sd across
+individuals are obtained, and used to scale the measurements. Default is TRUE.}
 
 \item{show_factor_ppi_progress}{Whether to show a plot of the factor posterior
 probabilities of inclusion as the algorithm progresses. Default is FALSE.}

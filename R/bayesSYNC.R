@@ -23,10 +23,9 @@
 #' @param verbose Boolean indicating whether messages should be printed during
 #'                the run. Default is TRUE.
 #' @param seed User-specified seed for reproducibility.
-#' @param bool_scale Whether to standardise the variables so the variables are on a
-#'        similar scale. The per-variable within-individual mean and sd are first
-#'        computed, their average across individuals are obtained, and used to
-#'        scale the measurements. Default is TRUE.
+#' @param bool_scale Whether to standardise the variables. The per-variable
+#'        within-individual means are first computed, their mean and sd across
+#'        individuals are obtained, and used to scale the measurements. Default is TRUE.
 #' @param show_factor_ppi_progress Whether to show a plot of the factor posterior
 #'        probabilities of inclusion as the algorithm progresses. Default is FALSE.
 #'
@@ -114,12 +113,11 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
 
   if (bool_scale) {
     mean_per_subject <- sapply(1:p, function(j) sapply(1:N, function(i) mean(Y[[i]][[j]])))
-    sd_per_subject <- sapply(1:p, function(j) sapply(1:N, function(i) sd(Y[[i]][[j]])))
 
     mean_mean_across_subjects <- colMeans(mean_per_subject)
-    mean_sd_across_subjects <- colMeans(sd_per_subject)
+    sd_mean_across_subjects <- colSds(mean_per_subject)
 
-    Y <- lapply(1:N, function(i) lapply(1:p, function(j) (Y[[i]][[j]] - mean_mean_across_subjects[j]) / mean_sd_across_subjects[j]))
+    Y <- lapply(1:N, function(i) lapply(1:p, function(j) (Y[[i]][[j]] - mean_mean_across_subjects[j]) / sd_mean_across_subjects[j]))
   }
 
   grid_obj <- get_grid_objects(time_obs, K, n_g = n_g, time_g = time_g,

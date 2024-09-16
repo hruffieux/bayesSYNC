@@ -13,9 +13,9 @@
 #' @importFrom magic adiag
 #' @importFrom MASS mvrnorm
 #' @importFrom matrixcalc duplication.matrix
-#' @importFrom matrixStats colProds
+#' @importFrom matrixStats colProds colSds
 #' @importFrom pracma blkdiag
 #' @importFrom splines spline.des
-#' @importFrom stats sd var cov cor dnorm median pnorm qnorm quantile rbinom rnorm runif setNames
+#' @importFrom stats var cov cor dnorm median pnorm qnorm quantile rbinom rnorm runif setNames
 #' @importFrom utils read.table
 NULL
