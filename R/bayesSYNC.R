@@ -102,6 +102,11 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
   }
   check_natural(K)
 
+  if (show_factor_ppi_progress && Q >= 20) {
+    warning("show_factor_ppi_progress is set to FALSE as Q is too large for display.")
+    show_factor_ppi_progress <- FALSE
+  }
+
   grid_obj <- get_grid_objects(time_obs, K, n_g = n_g, time_g = time_g,
                                format_univ = TRUE)
 
@@ -426,7 +431,9 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
 
     if (show_factor_ppi_progress) {
       factor_ppi_progress <- rbind(factor_ppi_progress, 1 - colProds(1-mu_q_gamma))
-      par(mfrow= c(Q,1))
+
+      disp <- Q %/% 5 + 1
+      par(mfrow= c(ceiling(Q/disp), disp))
       for (q in 1:Q) {
         plot(factor_ppi_progress[,q], type = "o", pch = 20, ylim = c(0, 1),
              xlab = "Iteration", ylab = "Max factor PPI", main = paste0("Factor q = ", q))
