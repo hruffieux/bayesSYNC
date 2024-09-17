@@ -117,7 +117,10 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
     mean_mean_across_subjects <- colMeans(mean_per_subject)
     sd_mean_across_subjects <- colSds(mean_per_subject)
 
-    Y <- lapply(1:N, function(i) lapply(1:p, function(j) (Y[[i]][[j]] - mean_mean_across_subjects[j]) / sd_mean_across_subjects[j]))
+    Y <- lapply(1:N, function(i) { Y_i <- lapply(1:p, function(j) (Y[[i]][[j]] - mean_mean_across_subjects[j]) / sd_mean_across_subjects[j])
+                                   names(Y_i) <- names(Y[[i]]); Y_i
+    })
+    names(Y) <- subj_names
   }
 
   grid_obj <- get_grid_objects(time_obs, K, n_g = n_g, time_g = time_g,
