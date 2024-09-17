@@ -166,6 +166,11 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
   eps <- .Machine$double.eps^0.5
   eps_elbo <- 1e-11 # could probably be taken as eps, simply
 
+  if (!debug) {
+    nb_it_elbo_decrease <- 0
+    bool_warn <- F
+  }
+
   sigma_zeta <- list_hyper$sigma_zeta
   mu_beta <- list_hyper$mu_beta
   Sigma_beta <- list_hyper$Sigma_beta
@@ -521,7 +526,8 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
         if (debug) {
           stop(paste0("ELBO not increasing monotonically. Difference last consecutive ELBO values: ", ELBO_diff, " Exit."))
         } else {
-          warning(paste0("ELBO not increasing monotonically. Difference last consecutive ELBO values: ", ELBO_diff))
+          nb_it_elbo_decrease <- nb_it_elbo_decrease + 1
+          bool_warn <- T
         }
       }
 
@@ -584,6 +590,10 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
   list_eigenvalues <- lapply(list_Zeta_hat, function(Zeta_hat) apply(Zeta_hat, 2, function(vv) var(vv)))
   list_cumulated_pve <- lapply(list_eigenvalues, function(eigenvalues) cumsum(eigenvalues) / sum(eigenvalues) * 100)
 
+
+  if (!debug && bool_warn) {
+    warning(paste0(nb_it_elbo_decrease, " occurences of ELBO not increasing monotonically, over a total of ", i_iter, " iterations."))
+  }
 
   res <- create_named_list(Y, # may be standardised now
                            K, list_Y_hat, list_Y_low, list_Y_upp,
