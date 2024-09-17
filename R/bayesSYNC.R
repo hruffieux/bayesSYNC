@@ -525,7 +525,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
         }
       }
 
-      rel_converged <- (abs(ELBO[i_iter] / ELBO[i_iter-1] - 1) < tol_rel)
+      rel_converged <- (abs(max(ELBO[i_iter-1], ELBO[i_iter]) / min(ELBO[i_iter-1], ELBO[i_iter]) - 1) < tol_rel) # to deal with the fact that the elbo may be decreasing (abs(ELBO[i_iter] / ELBO[i_iter-1] - 1) < tol_rel)
       abs_converged <- (abs(ELBO_diff) < tol_abs)
 
       if(rel_converged | abs_converged) {
