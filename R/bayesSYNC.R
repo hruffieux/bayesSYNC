@@ -192,7 +192,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
   mu_q_recip_sigsq_mu  <- mu_q_recip_sigsq_eps <- rep(1, p)
   mu_q_recip_sigsq_phi <- matrix(1, nrow = Q, ncol = L)
 
-  kappa_q_sigsq_mu <- kappa_q_sigsq_phi <- K/2 + 1
+  kappa_q_sigsq_mu <- kappa_q_sigsq_phi <- K/2 + 0.5
   kappa_q_a_mu <- kappa_q_a_eps <- kappa_q_a_phi <- 1
   kappa_q_sigsq_eps <- sum_obs/2 + 0.5
 
