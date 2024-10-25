@@ -148,7 +148,7 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
     stop("Variable names for each individual in time_obs must be the same as in Y.")
   }
 
-  debug <- F # whether to throw an error when the ELBO is not increasing monotonically
+  debug <- T # whether to throw an error when the ELBO is not increasing monotonically
 
   bayesSYNC_core(N = N, p=p, L=L, Q=Q, K=K, C = C, Y = Y, list_hyper,
                  time_obs = time_obs, n_g =n_g, time_g = time_g, C_g = C_g,
@@ -477,10 +477,10 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
     elbo_mu <- -p*log(prod(diag(Sigma_beta)))/2 + sum(0.5*vec_term_list_mu - 0.5*K*mu_q_log_sigsq_mu + K/2 + 1 +
       K/2*mu_q_log_sigsq_mu - mu_q_recip_sigsq_mu*(mu_q_recip_a_mu-lambda_q_sigsq_mu)-
       0.5*mu_q_log_a_mu -kappa_q_sigsq_mu*log(lambda_q_sigsq_mu)-lgamma(0.5)+lgamma(kappa_q_sigsq_mu)+
-      (3/2)*mu_q_log_a_mu - mu_q_recip_a_mu*(1/A^2 - lambda_q_a_mu) - log(lambda_q_a_mu) - lgamma(0.5) + lgamma(1) + 0.5*log(1/A^2)+
+      (1/2)*mu_q_log_a_mu - mu_q_recip_a_mu*(1/A^2 - lambda_q_a_mu) - log(lambda_q_a_mu) - lgamma(0.5) + lgamma(1) + 0.5*log(1/A^2)+
       (kappa_q_sigsq_eps -0.5)*mu_q_log_sigsq_eps - mu_q_recip_sigsq_eps*(mu_q_recip_a_eps - lambda_q_sigsq_eps)-
       0.5*mu_q_log_a_eps - kappa_q_sigsq_eps*log(lambda_q_sigsq_eps)-lgamma(0.5)+ lgamma(kappa_q_sigsq_eps)+
-      (3/2)*mu_q_log_a_eps -mu_q_recip_a_eps*(1/A^2-lambda_q_a_eps)-
+      (1/2)*mu_q_log_a_eps -mu_q_recip_a_eps*(1/A^2-lambda_q_a_eps)-
       log(lambda_q_a_eps)-lgamma(0.5)+lgamma(1)+ 0.5*log(1/A^2))
 
     elbo_b_g <- sum(0.5*mu_q_gamma*(log(Sigma_q_normal_b)+ 1) - 0.5*term_b +
@@ -493,7 +493,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
 
     elbo_sig_phi <- sum(K/2*mu_q_log_sigsq_phi - (mu_q_recip_a_phi - lambda_q_sigsq_phi)*mu_q_recip_sigsq_phi -
       0.5*mu_q_log_a_phi - kappa_q_sigsq_phi*log(lambda_q_sigsq_phi) - lgamma(0.5) + lgamma(kappa_q_sigsq_phi) +
-      (3/2)*mu_q_log_a_phi - (1/A^2-lambda_q_a_phi)*mu_q_recip_a_phi +
+      (1/2)*mu_q_log_a_phi - (1/A^2-lambda_q_a_phi)*mu_q_recip_a_phi +
       0.5*log(1/A^2) - log(lambda_q_a_phi) - lgamma(0.5) + lgamma(1))
 
     mat_term_list_phi <- sapply(1:L, function(l) sapply(1:Q, function(q) {
