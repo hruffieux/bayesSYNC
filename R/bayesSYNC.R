@@ -33,11 +33,6 @@
 #'
 #' @export
 #'
-# bayesSYNC <- function(time_obs, Y, L, K = NULL, list_hyper = NULL, maxit = 500,
-#                   n_g = 1000, time_g = NULL, Phi_g = NULL, verbose = TRUE, seed = NULL) {
-#   # Function implementation here
-# }
-
 bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
                       list_hyper = NULL,
                       n_g = 1000, time_g = NULL,
@@ -148,7 +143,7 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
     stop("Variable names for each individual in time_obs must be the same as in Y.")
   }
 
-  debug <- T # whether to throw an error when the ELBO is not increasing monotonically
+  debug <- F # whether to throw an error when the ELBO is not increasing monotonically
 
   bayesSYNC_core(N = N, p=p, L=L, Q=Q, K=K, C = C, Y = Y, list_hyper,
                  time_obs = time_obs, n_g =n_g, time_g = time_g, C_g = C_g,
@@ -582,6 +577,9 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
 
   B_hat <- mu_q_b
   ppi <- mu_q_gamma
+  rownames(B_hat) <- rownames(ppi) <- names(Y[[1]])
+  colnames(B_hat) <- colnames(ppi) <- paste0("Factor_", 1:Q)
+
 
   # probabilities of activity of each factor:
   factor_ppi <- 1 - colProds(1-ppi) # probability that each factor contains at least one contribution by a variable
