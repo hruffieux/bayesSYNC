@@ -561,6 +561,9 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
                              Sigma_q_zeta,
                              sigsq_eps)
 
+  list_h_hat <- res_orth$list_h_hat
+  list_h_low <- res_orth$list_h_low
+  list_h_upp <- res_orth$list_h_upp
   list_Y_hat <- res_orth$list_Y_hat
   list_Y_low <- res_orth$list_Y_low
   list_Y_upp <- res_orth$list_Y_upp
@@ -577,24 +580,36 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
 
   B_hat <- mu_q_b
   ppi <- mu_q_gamma
-  rownames(B_hat) <- rownames(ppi) <- names(Y[[1]])
+  rownames(B_hat) <- rownames(ppi) <- names(list_mu_hat) <- names(Y[[1]])
   colnames(B_hat) <- colnames(ppi) <- paste0("Factor_", 1:Q)
-
 
   # probabilities of activity of each factor:
   factor_ppi <- 1 - colProds(1-ppi) # probability that each factor contains at least one contribution by a variable
 
-
   list_eigenvalues <- lapply(list_Zeta_hat, function(Zeta_hat) apply(Zeta_hat, 2, function(vv) var(vv)))
   list_cumulated_pve <- lapply(list_eigenvalues, function(eigenvalues) cumsum(eigenvalues) / sum(eigenvalues) * 100)
 
+  names(list_Zeta_hat) <- names(list_Cov_zeta_hat) <- names(list_list_zeta_ellipse) <- names(list_list_Phi_hat) <- names(list_cumulated_pve) <- paste0("factor_", 1:Q)
+  for (q in 1:Q) {
+    rownames(list_Zeta_hat[[q]]) <- names(list_Cov_zeta_hat[[q]]) <- names(list_list_zeta_ellipse[[q]]) <- names(Y)
+    colnames(list_Zeta_hat[[q]]) <- colnames(list_list_Phi_hat[[q]]) <- paste0("component_", 1:L)
+  }
+
+  names(list_Y_hat) <- names(list_Y_low) <- names(list_Y_upp) <- names(Y)
+  names(list_h_hat) <- names(list_h_low) <- names(list_h_upp) <- names(Y)
+  for (i in 1:N) {
+    names(list_Y_hat[[i]]) <- names(list_Y_low[[i]]) <- names(list_Y_upp[[i]]) <- names(Y[[i]])
+    names(list_h_hat[[i]]) <- names(list_h_low[[i]]) <- names(list_h_upp[[i]]) <- paste0("factor_", 1:Q)
+  }
 
   if (!debug && bool_warn) {
     warning(paste0(nb_it_elbo_decrease, " occurences of ELBO not increasing monotonically, over a total of ", i_iter, " iterations."))
   }
 
   res <- create_named_list(Y, # may be standardised now
-                           K, list_Y_hat, list_Y_low, list_Y_upp,
+                           K,
+                           list_h_hat, list_h_low, list_h_upp,
+                           list_Y_hat, list_Y_low, list_Y_upp,
                            list_mu_hat, list_list_Phi_hat,
                            list_Zeta_hat, list_Cov_zeta_hat, list_list_zeta_ellipse,
                            # Sigma_q_nu_mu,mu_q_nu_mu, Sigma_q_nu_phi,mu_q_nu_phi,mu_q_zeta, Sigma_q_zeta, sigsq_eps,
@@ -641,6 +656,9 @@ orthonormalise <- function(N, p, Q, L, time_g, C_g, # see what she has used?
 
   one_N <- rep(1, N)
   list_mu_mat <- lapply(list_mu_q_mu, function(mu_q_mu) tcrossprod(mu_q_mu, one_N))
+
+  list_h <- lapply(1:Q, function(q) tcrossprod(list_M_q_Phi[[q]], list_M_q_Zeta[[q]]))
+
   list_Y_mat <- lapply(1:p, function(j) { list_mu_mat[[j]] +
       Reduce('+', lapply(1:Q, function(q) mu_q_b[j, q] * tcrossprod(list_M_q_Phi[[q]], list_M_q_Zeta[[q]])))})
 
@@ -785,6 +803,7 @@ orthonormalise <- function(N, p, Q, L, time_g, C_g, # see what she has used?
   }
 
   list_Y_hat <- list_Y_low <- list_Y_upp <- vector("list", length = N)
+  list_h_hat <- list_h_low <- list_h_upp <- vector("list", length = N)
 
   # list_var_vec <- lapply(1:Q, function(q) lapply(1:N, function(i)
   #   diag(tcrossprod(list_M_q_Phi[[q]]%*%Sigma_q_zeta[[q]][[i]], list_M_q_Phi[[q]])))) # functions assumed to be known exactly (we can use all objects pre-orthogonalisation to construct y)
@@ -798,6 +817,16 @@ orthonormalise <- function(N, p, Q, L, time_g, C_g, # see what she has used?
   #   sqrt(diag(tcrossprod(list_list_Phi_hat[[q]]%*%list_Cov_zeta_hat[[q]][[i]], list_list_Phi_hat[[q]]))))) # functions assumed to be known exactly
 
   for(i in 1:N) {
+
+    list_h_hat[[i]] <- list_h_low[[i]] <- list_h_upp[[i]] <- vector("list", length = Q)
+
+    for (q in 1:Q) {
+      sd_i_q <- sqrt(list_var_vec[[q]][[i]]) # without contribution of error
+
+      list_h_hat[[i]][[q]] <- list_h[[q]][,i]
+      list_h_low[[i]][[q]] <- list_h[[q]][,i] + qnorm(0.025) * sd_i_q
+      list_h_upp[[i]][[q]] <- list_h[[q]][,i] + qnorm(0.975) * sd_i_q
+    }
 
     list_Y_hat[[i]] <- list_Y_low[[i]] <- list_Y_upp[[i]] <- vector("list", length = p)
 
@@ -813,6 +842,7 @@ orthonormalise <- function(N, p, Q, L, time_g, C_g, # see what she has used?
   }
 
   create_named_list(list_Y_hat, list_Y_low, list_Y_upp,
+                    list_h_hat, list_h_low, list_h_upp,
                     list_mu_hat, list_list_Phi_hat,
                     list_Zeta_hat, list_Cov_zeta_hat, list_list_zeta_ellipse,
                     mu_q_b_norm)
