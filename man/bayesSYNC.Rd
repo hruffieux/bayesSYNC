@@ -15,7 +15,7 @@ bayesSYNC(
   time_g = NULL,
   tol_abs = 0.001,
   tol_rel = 1e-05,
-  maxit = 500,
+  maxit = 1000,
   n_cpus = 1,
   verbose = TRUE,
   seed = NULL,
@@ -34,7 +34,9 @@ of observations for univariate or multivariate curves, respectively.}
 
 \item{Q}{Number of latent factors.}
 
-\item{K}{Number of spline functions (if applicable). Default is NULL.}
+\item{K}{Number of O'Sullivan spline functions to be used to represent the
+latent functions. If set to \code{NULL} will be set according to the
+rule of Ruppert (2002), also enforcing K >=7.}
 
 \item{list_hyper}{Hyperparameter settings constructed using the function
 \code{\link{set_hyper}}. If \code{NULL}, default hyperparameters will be used.}
@@ -49,9 +51,9 @@ then \code{n_g} must be \code{NULL} as it will be taken to be
 
 \item{tol_rel}{Tolerance on the relative changes in the ELBO.}
 
-\item{maxit}{Number of iterations for the mean-field variational Bayes algorithm. Default maxit = 500.}
+\item{maxit}{Number of iterations for the mean-field variational Bayes algorithm. Default maxit = 1000.}
 
-\item{n_cpus}{User-sepcieid number of CPU to be used for parallel execution. Default n_cpus = 1 for serial execution.}
+\item{n_cpus}{User-specified number of CPU to be used for parallel execution. Default n_cpus = 1 for serial execution.}
 
 \item{verbose}{Boolean indicating whether messages should be printed during
 the run. Default is TRUE.}

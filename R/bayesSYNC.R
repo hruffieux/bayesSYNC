@@ -1,3 +1,190 @@
+#' This function performs functional analysis to uncover shared latent dynamics
+#' using Bayesian methods. with model choice procedure for
+#' selection of either the number of FPCA components, L, or the number of latent
+#' factors, Q.
+#'
+#' @param time_obs  List of vectors or list of lists of vectors containing time
+#'                  of observations for univariate or multivariate curves,
+#'                  respectively.
+#' @param Y List of vectors (for univariate curves) or list of lists of vectors
+#'          (for multivariate curves) with the functional data.
+#' @param model_choice String indicating whether the model choice is to be
+#'        performed for the number of latent factors ("Q") or for the number of
+#'        components ("L").
+#' @param list_L List containing specifications for the choice of the number of
+#'               components 'L'. If \code{model_choice = "L"}, then must consist
+#'               of two parameters, 'lambda_L' and 'L_max', specifying the
+#'               Poisson(lambda_L) prior, truncated to {1, ..., L_max}, on the
+#'               number of components L (e.g., lambda_L = 3, L_max = 10);
+#'               if \code{model_choice = "K"}, then must consist of an integer
+#'               named 'L' representing the (maximum) number of components to be
+#'               used (e.g., L = 10).
+#' @param list_Q List containing specifications for the choice of the number of
+#'               factors 'Q'. If \code{model_choice = "Q"}, then must consist of
+#'               two parameters, 'lambda_Q' and 'Q_max', specifying the
+#'               Poisson(lambda_Q) prior, truncated to {2, ..., Q_max}, on the
+#'               number of factors Q (e.g., lambda_Q = 1, L_max = 6);
+#'               if \code{model_choice = "L"}, then must consist of an integer
+#'               named 'Q' representing the (maximum) number of factors to be
+#'               used (e.g., Q = 3).
+#' @param K Number of O'Sullivan spline functions to be used to represent the
+#'          latent functions. If set to \code{NULL} will be set according to the
+#'          rule of Ruppert (2002), also enforcing K >=7.
+#' @param list_hyper Hyperparameter settings constructed using the function
+#'         \code{\link{set_hyper}}. If \code{NULL} default hyperparameters will
+#'         be used.
+#' @param n_g Desired size for dense grid.
+#' @param time_g Dense grid provided as a vector of size \code{n_g}. If provided,
+#'               then \code{n_g} must be \code{NULL} as will be taken to be
+#'               \code{length(time_g)}.
+#' @param tol_abs Tolerance on the absolute changes in the ELBO.
+#' @param tol_rel Tolerance on the relative changes in the ELBO.
+#' @param maxit Number of iterations for the mean-field variational Bayes algorithm. Default maxit = 1000.
+#' @param n_cpus User-specified number of CPU to be used for parallel execution. Default n_cpus = 1 for serial execution.
+#' @param verbose Boolean indicating whether messages should be printed during
+#'                the run.
+#' @param seed User-specified seed for reproducibilty.
+#' @param bool_scale Whether to standardise the variables. The per-variable
+#'        within-individual means are first computed, their mean and sd across
+#'        individuals are obtained, and used to scale the measurements. Default is TRUE.
+#'
+#' @return An object containing the resulting MFVB estimates.
+#'
+#' @seealso  \code{\link{run_mfvb_fpca}},
+#'           \code{\link{run_vmp_fpca}}, \code{\link{run_vmp_fpca_model_choice}},
+#'           \code{\link{set_hyper}}, \code{\link{flip_sign}}, \code{\link{display_fit}},
+#'           \code{\link{display_fit_list}}, \code{\link{display_scores}},
+#'           \code{\link{display_eigenfunctions}}
+#'
+#' @references
+#' Nolan, T. H., Goldsmith, J., & Ruppert, D. (2023). Bayesian Functional
+#' Principal Components Analysis via Variational Message Passing with Multilevel
+#' Extensions. Bayesian Analysis, 1(1), 1-27.
+#'
+#' Ruppert, D. (2002). Selecting the number of knots for penalized splines.
+#' Journal of computational and graphical statistics, 11(4), 735-757.
+#'
+#' @export
+#'
+bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
+                                       list_hyper = NULL,
+                                       n_g = 1000, time_g = NULL,
+                                       tol_abs = 1e-3,
+                                       tol_rel = 1e-5, maxit = 1000,
+                                       n_cpus = 1, verbose = TRUE, seed = NULL,
+                                       bool_scale = TRUE) {
+
+  check_structure(model_choice, "vector", "string", 1)
+  stopifnot(model_choice %in% c("Q", "L"))
+
+  stopifnot(is.list(list_Q))
+  stopifnot(is.list(list_L))
+
+  if (model_choice == "Q") {
+
+    if (all(names(list_Q) != c("lambda_Q", "Q_max"))) {
+      stop("list_Q must be a list containing two parameters, named 'lambda_Q'
+           and 'Q_max' specifying the Poisson(lambda_Q) prior, truncated
+           to {1, ..., Q_max}, on the number of latent factors Q.")
+    }
+    lambda_Q <- list_Q$lambda_Q
+    Q_max <- list_Q$Q_max
+
+    check_structure(lambda_Q, "vector", "numeric", 1)
+    check_positive(lambda_Q)
+
+    check_structure(Q_max, "vector", "numeric", 1)
+    check_natural(Q_max)
+    check_positive(Q_max > 1)
+
+    if (names(list_L) != "L") {
+      stop("list_L must be a list containing an integer named 'L' representing
+            the (maximum) number of components to be used")
+    }
+
+    L <- list_L$L
+
+  } else {
+
+    if (all(names(list_L) != c("lambda_L", "L_max"))) {
+      stop("list_L must be a list containing two parameters, named 'lambda_L'
+           and 'L_max' specifying the Poisson(lambda_L) prior, truncated
+           to {1, ..., L_max}, on the number of components L.")
+    }
+    lambda_L <- list_L$lambda_L
+    L_max <- list_L$L_max
+
+    check_structure(lambda_L, "vector", "numeric", 1)
+    check_positive(lambda_L)
+
+    check_structure(L_max, "vector", "numeric", 1)
+    check_natural(L_max)
+    check_positive(L_max > 1)
+
+    if (names(list_Q) != "Q") {
+      stop("list_Q must be a list containing an integer named 'Q' representing
+            the number of latent factors to be used.")
+    }
+
+    Q <- list_Q$Q
+
+  }
+
+  check_structure(n_cpus, "vector", "numeric", 1)
+  check_natural(n_cpus)
+  check_positive(n_cpus)
+
+
+  if (model_choice == "Q") {
+
+    vec_Q <- 2:Q_max
+    n_cpus_outer <- min(length(vec_Q), n_cpus)
+    n_cpus_inner <- floor(n_cpus / n_cpus_outer)
+
+    out <- parallel::mclapply(vec_Q, function(Q) {
+
+      bayesSYNC(time_obs = time_obs, Y = Y, L = L, Q = Q, K = K,
+                    list_hyper = list_hyper,
+                    n_g = n_g, time_g = time_g, tol_abs = tol_abs, tol_rel = tol_rel,
+                    maxit = maxit, n_cpus = n_cpus_inner,
+                    verbose = verbose, seed = seed, bool_scale = bool_scale,
+                    show_factor_ppi_progress = FALSE)
+
+    }, mc.cores = n_cpus_outer)
+
+    vec_elbo <- sapply(out, "[[", "ELBO")
+
+    vec_log_unnorm_p_model_given_y <- vec_elbo + vec_Q * log(lambda_Q) - lfactorial(vec_Q) - lambda_Q
+
+    out[[which.max(vec_log_unnorm_p_model_given_y)]]
+
+  } else {
+
+    vec_L <- 1:L_max
+    n_cpus_outer <- min(length(vec_L), n_cpus)
+    n_cpus_inner <- floor(n_cpus / n_cpus_outer)
+
+    out <- parallel::mclapply(vec_L, function(L) {
+
+      bayesSYNC(time_obs = time_obs, Y = Y, L = L, Q = Q, K = K,
+                list_hyper = list_hyper,
+                n_g = n_g, time_g = time_g, tol_abs = tol_abs, tol_rel = tol_rel,
+                maxit = maxit, n_cpus = n_cpus_inner,
+                verbose = verbose, seed = seed, bool_scale = bool_scale,
+                show_factor_ppi_progress = FALSE)
+
+    }, mc.cores = n_cpus_outer)
+
+    vec_elbo <- sapply(out, "[[", "ELBO")
+
+    vec_log_unnorm_p_model_given_y <- vec_elbo + vec_L * log(lambda_L) - lfactorial(vec_L) - lambda_L
+
+    out[[which.max(vec_log_unnorm_p_model_given_y)]]
+
+  }
+
+}
+
 #' BAYESian model for high-dimensional functional factor analysis of Shared latent dYNamiCs (bayesSYNC)
 #'
 #' This function performs functional analysis to uncover shared latent dynamics
@@ -9,7 +196,9 @@
 #'          (for multivariate curves) with the functional data.
 #' @param L Number of latent dimensions.
 #' @param Q Number of latent factors.
-#' @param K Number of spline functions (if applicable). Default is NULL.
+#' @param K Number of O'Sullivan spline functions to be used to represent the
+#'          latent functions. If set to \code{NULL} will be set according to the
+#'          rule of Ruppert (2002), also enforcing K >=7.
 #' @param list_hyper Hyperparameter settings constructed using the function
 #'         \code{\link{set_hyper}}. If \code{NULL}, default hyperparameters will be used.
 #' @param n_g Desired size for dense grid.
@@ -18,8 +207,8 @@
 #'               \code{length(time_g)}.
 #' @param tol_abs Tolerance on the absolute changes in the ELBO.
 #' @param tol_rel Tolerance on the relative changes in the ELBO.
-#' @param maxit Number of iterations for the mean-field variational Bayes algorithm. Default maxit = 500.
-#' @param n_cpus User-sepcieid number of CPU to be used for parallel execution. Default n_cpus = 1 for serial execution.
+#' @param maxit Number of iterations for the mean-field variational Bayes algorithm. Default maxit = 1000.
+#' @param n_cpus User-specified number of CPU to be used for parallel execution. Default n_cpus = 1 for serial execution.
 #' @param verbose Boolean indicating whether messages should be printed during
 #'                the run. Default is TRUE.
 #' @param seed User-specified seed for reproducibility.
@@ -37,7 +226,7 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
                       list_hyper = NULL,
                       n_g = 1000, time_g = NULL,
                       tol_abs = 1e-3,
-                      tol_rel = 1e-5, maxit = 500, n_cpus = 1,
+                      tol_rel = 1e-5, maxit = 1000, n_cpus = 1,
                       verbose = TRUE, seed = NULL,
                       bool_scale = TRUE,
                       show_factor_ppi_progress = FALSE) {
@@ -608,6 +797,8 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
 
   res <- create_named_list(Y, # may be standardised now
                            K,
+                           Q,
+                           L,
                            list_h_hat, list_h_low, list_h_upp,
                            list_Y_hat, list_Y_low, list_Y_upp,
                            list_mu_hat, list_list_Phi_hat,
