@@ -560,10 +560,16 @@ match_sign_components <- function(Zeta,
           cor(Zeta_lq, sapply(1:N, function(i) list_Zeta_hat[[q_tilde]][i,l_tilde]))))
 
       corr_zeta[is.na(corr_zeta)] <- 0
-      q_tilde <- which(abs(corr_zeta) == max(abs(corr_zeta)), arr.ind = TRUE)[1,1]
-      l_tilde <- which(abs(corr_zeta) == max(abs(corr_zeta)), arr.ind = TRUE)[1,2]
+      if (Q_true > 1) {
+        q_tilde <- which(abs(corr_zeta) == max(abs(corr_zeta)), arr.ind = TRUE)[1,1]
+        l_tilde <- which(abs(corr_zeta) == max(abs(corr_zeta)), arr.ind = TRUE)[1,2]
+        perm_sign_fpca[q, l] <- sign(corr_zeta[q_tilde, l_tilde])
+      } else {
+        q_tilde <- 1
+        l_tilde <- which(abs(corr_zeta) == max(abs(corr_zeta)))
+        perm_sign_fpca[q, l] <- sign(corr_zeta[l_tilde])
+      }
 
-      perm_sign_fpca[q, l] <- sign(corr_zeta[q_tilde, l_tilde])
       perm_list_Zeta_hat[[q]][, l] <- perm_sign_fpca[q,l]*list_Zeta_hat[[q_tilde]][, l_tilde]
       perm_list_list_Phi_hat[[q]][, l]<- perm_sign_fpca[q,l]*list_list_Phi_hat[[q_tilde]][, l_tilde]
     }

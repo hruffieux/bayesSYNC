@@ -50,7 +50,7 @@ used (e.g., L = 10).}
 \item{list_Q}{List containing specifications for the choice of the number of
 factors 'Q'. If \code{model_choice = "Q"}, then must consist of
 two parameters, 'lambda_Q' and 'Q_max', specifying the
-Poisson(lambda_Q) prior, truncated to {1, ..., Q_max}, on the
+Poisson(lambda_Q) prior, truncated to {2, ..., Q_max}, on the
 number of factors Q (e.g., lambda_Q = 1, L_max = 6);
 if \code{model_choice = "L"}, then must consist of an integer
 named 'Q' representing the (maximum) number of factors to be

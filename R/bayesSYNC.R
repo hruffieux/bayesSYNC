@@ -137,7 +137,7 @@ bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
 
   if (model_choice == "Q") {
 
-    vec_Q <- 2:Q_max
+    vec_Q <- 1:Q_max
     n_cpus_outer <- min(length(vec_Q), n_cpus)
     n_cpus_inner <- floor(n_cpus / n_cpus_outer)
 
@@ -152,11 +152,12 @@ bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
 
     }, mc.cores = n_cpus_outer)
 
-    vec_elbo <- sapply(out, "[[", "ELBO")
+    vec_elbo <- sapply(out, "[[", "ELBO_iter")
+    names(vec_elbo) <- paste0("Q_", vec_Q)
 
     vec_log_unnorm_p_model_given_y <- vec_elbo + vec_Q * log(lambda_Q) - lfactorial(vec_Q) - lambda_Q
 
-    out[[which.max(vec_log_unnorm_p_model_given_y)]]
+    res <- out[[which.max(vec_log_unnorm_p_model_given_y)]]
 
   } else {
 
@@ -175,13 +176,19 @@ bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
 
     }, mc.cores = n_cpus_outer)
 
-    vec_elbo <- sapply(out, "[[", "ELBO")
+    vec_elbo <- sapply(out, "[[", "ELBO_iter")
+    names(vec_elbo) <- paste0("L_", vec_L)
 
     vec_log_unnorm_p_model_given_y <- vec_elbo + vec_L * log(lambda_L) - lfactorial(vec_L) - lambda_L
 
-    out[[which.max(vec_log_unnorm_p_model_given_y)]]
+    res <- out[[which.max(vec_log_unnorm_p_model_given_y)]]
 
   }
+
+  res$vec_elbo <- vec_elbo
+  res$vec_log_unnorm_p_model_given_y <- vec_log_unnorm_p_model_given_y
+
+  res
 
 }
 
@@ -468,14 +475,16 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
 
           tmp_term_qil <- tmp_term_qil_2 <- vector("list", length = Q)
 
-          for (q_tilde in setdiff(1:Q, q)) {
+          if (Q > 1) {
+            for (q_tilde in setdiff(1:Q, q)) {
 
-            # avoid recomputing for each j
-            tmp_term_qil[[q_tilde]] <- rowSums(sapply(1:L, function(l_tilde) { mu_q_zeta[[q_tilde]][i,l_tilde] * mu_q_zeta[[q]][i,l] *
-                list_cp_C_nu_phi[[i]][[q_tilde]][,l_tilde, drop = F]
-            }))
-            tmp_term_qil[[q_tilde]] <- tmp_term_qil[[q_tilde]] * sum(mu_q_recip_sigsq_eps * mu_q_b[, q] * mu_q_b[, q_tilde])
+              # avoid recomputing for each j
+              tmp_term_qil[[q_tilde]] <- rowSums(sapply(1:L, function(l_tilde) { mu_q_zeta[[q_tilde]][i,l_tilde] * mu_q_zeta[[q]][i,l] *
+                  list_cp_C_nu_phi[[i]][[q_tilde]][,l_tilde, drop = F]
+              }))
+              tmp_term_qil[[q_tilde]] <- tmp_term_qil[[q_tilde]] * sum(mu_q_recip_sigsq_eps * mu_q_b[, q] * mu_q_b[, q_tilde])
 
+            }
           }
 
           # avoid recomputing for each j
@@ -505,12 +514,14 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
       for (i in 1:N) {
 
         # # Update of q(zeta_iq):
-        mod_h_i_nu <- rowSums(sapply(setdiff(1:Q, q), function(q_tilde) {
-          tmp_iq_tilde <- mu_q_nu_phi[[q_tilde]] %*% mu_q_zeta[[q_tilde]][i,]
-          rowSums(sapply(1:p, function(j) mu_q_b[j,q]*mu_q_recip_sigsq_eps[j]*mu_q_b[j,q_tilde]*tmp_iq_tilde))
-        }))
+        sum_mu <- rowSums(sapply(1:p, function(j) mu_q_b[j,q]*mu_q_recip_sigsq_eps[j]*(list_cp_C_Y[[i]][,j] - list_cp_C_nu_mu[[i]][,j]))) # - list_cp_C[[i]] %*% mod_h_i_nu
 
-        sum_mu <- rowSums(sapply(1:p, function(j) mu_q_b[j,q]*mu_q_recip_sigsq_eps[j]*(list_cp_C_Y[[i]][,j] - list_cp_C_nu_mu[[i]][,j]))) - list_cp_C[[i]] %*% mod_h_i_nu
+        if (Q > 1) {
+          sum_mu <- sum_mu - list_cp_C[[i]] %*% rowSums(sapply(setdiff(1:Q, q), function(q_tilde) {
+            tmp_iq_tilde <- mu_q_nu_phi[[q_tilde]] %*% mu_q_zeta[[q_tilde]][i,]
+            rowSums(sapply(1:p, function(j) mu_q_b[j,q]*mu_q_recip_sigsq_eps[j]*mu_q_b[j,q_tilde]*tmp_iq_tilde))
+          }))
+        }
 
         tr_term[[q]][[i]] <- diag(sapply(1:L, function(l) tr(list_cp_C[[i]] %*% Sigma_q_nu_phi[[q]][[l]])))
         mu_H_q_phi[[q]][[i]] <- crossprod(mu_q_nu_phi[[q]], list_cp_C[[i]]) %*% mu_q_nu_phi[[q]] + tr_term[[q]][[i]]
@@ -524,28 +535,28 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
 
     list_tcp_nu_phi_zeta <- parallel::mclapply(1:Q, function(q) tcrossprod(mu_q_nu_phi[[q]], mu_q_zeta[[q]]), mc.cores = n_cpus)
 
+
     lambda_q_sigsq_eps <- mu_q_recip_a_eps + simplify2array(parallel::mclapply(1:p, function(j) {
       0.5 * sum(sapply(1:N, function(i) {
-        list_cp_Y[i,j]-
+        sum_i_j <- list_cp_Y[i,j]-
           2*crossprod(mu_q_nu_mu[[j]] +
                         Reduce("+",
                                lapply(1:Q, function(q) mu_q_b[j,q]*list_tcp_nu_phi_zeta[[q]][,i])), list_cp_C_Y[[i]][,j]) +
           crossprod(mu_q_nu_mu[[j]], list_cp_C_nu_mu[[i]][,j]) + tr(crossprod(list_cp_C[[i]], Sigma_q_nu_mu[[j]])) +
           2*crossprod(Reduce("+",
-                             lapply(1:Q, function(q) mu_q_b[j,q]*list_tcp_nu_phi_zeta[[q]][,i])), list_cp_C_nu_mu[[i]][,j]) +
-          Reduce("+",
-                 lapply(1:Q, function(q) {
+                             lapply(1:Q, function(q) mu_q_b[j,q]*list_tcp_nu_phi_zeta[[q]][,i])), list_cp_C_nu_mu[[i]][,j])
 
-                   sum_val_phi<- term_b[j, q]*tr_qi[q, i]
-
-                   sum_val_phi_q_tilde <- Reduce("+", lapply(setdiff(1:Q, q), function(q_tilde) {
-                     mu_q_b[j,q_tilde]*C[[i]]%*%list_tcp_nu_phi_zeta[[q_tilde]][,i]
-
-                   }))
-
-                   sum_val_phi + mu_q_b[j,q]*crossprod(C[[i]] %*% list_tcp_nu_phi_zeta[[q]][,i], sum_val_phi_q_tilde)
-
-                 }))
+        if (Q > 1) {
+          sum_i_j +  Reduce("+", lapply(1:Q, function(q) {
+            sum_val_phi <- term_b[j, q]*tr_qi[q, i]
+            sum_val_phi_q_tilde <- Reduce("+", lapply(setdiff(1:Q, q), function(q_tilde) {
+                           mu_q_b[j,q_tilde]*C[[i]]%*%list_tcp_nu_phi_zeta[[q_tilde]][,i]
+                         }))
+            sum_val_phi + mu_q_b[j, q]*crossprod(C[[i]] %*% list_tcp_nu_phi_zeta[[q]][,i], sum_val_phi_q_tilde)
+                     }))
+        } else {
+          sum_i_j + term_b[j, q]*tr_qi[q, i]
+        }
       }))
     }, mc.cores = n_cpus))
 
@@ -608,11 +619,20 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
 
     for(q in 1:Q){
 
-      sum_mu_q <- unlist(parallel::mclapply(1:p, function(j) sum(sapply(1:N, function(i) crossprod(list_tcp_nu_phi_zeta[[q]][,i],
-                                                                                list_cp_C_Y[[i]][,j]-
-                                                                                  list_cp_C_nu_mu[[i]][,j]-
-                                                                                  list_cp_C[[i]]%*%rowSums(sapply(setdiff(1:Q, q), function(q_tilde) mu_q_gamma[j,q_tilde]*mu_q_normal_b[j,q_tilde]*list_tcp_nu_phi_zeta[[q_tilde]][,i]))))),
-                                                    mc.cores = n_cpus))
+      # sum_mu_q <- unlist(parallel::mclapply(1:p, function(j) sum(sapply(1:N, function(i) crossprod(list_tcp_nu_phi_zeta[[q]][,i],
+      #                                                                           list_cp_C_Y[[i]][,j]-
+      #                                                                             list_cp_C_nu_mu[[i]][,j]-
+      #                                                                             list_cp_C[[i]]%*%rowSums(sapply(setdiff(1:Q, q), function(q_tilde) mu_q_gamma[j,q_tilde]*mu_q_normal_b[j,q_tilde]*list_tcp_nu_phi_zeta[[q_tilde]][,i]))))),
+      #                                               mc.cores = n_cpus))
+
+      sum_mu_q <- unlist(parallel::mclapply(1:p, function(j) sum(sapply(1:N, function(i) {
+        cp_i_j <- crossprod(list_tcp_nu_phi_zeta[[q]][,i], list_cp_C_Y[[i]][,j] - list_cp_C_nu_mu[[i]][,j])
+        if (Q > 1) {
+          cp_i_j <- cp_i_j - crossprod(list_tcp_nu_phi_zeta[[q]][,i],
+                                       list_cp_C[[i]]%*%rowSums(sapply(setdiff(1:Q, q), function(q_tilde) mu_q_gamma[j,q_tilde]*mu_q_normal_b[j,q_tilde]*list_tcp_nu_phi_zeta[[q_tilde]][,i])))
+        }
+        cp_i_j
+        })), mc.cores = n_cpus))
 
       # don't move outside the for(q in 1:Q) loop as used in the update for sum_mu_q, leads to a less efficient scheme if outside
       Sigma_q_normal_b[,q] <- 1/(mu_q_recip_sigsq_eps * rs_tr_qi[q] + 1)
@@ -701,7 +721,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
 
     ELBO <- c(ELBO, ELBO_iter)
 
-    if (i_iter >1){
+    if (i_iter >1) {
 
       ELBO_diff <- ELBO[i_iter] - ELBO[i_iter-1]
 
@@ -721,16 +741,18 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
       if(rel_converged | abs_converged) {
 
         mess_criterion_met <- paste0(ifelse(rel_converged, "Relative ", "Absolute "), "convergence criterion met. \n")
+        ELBO_last <- ELBO[i_iter]
 
         if (verbose) {
           cat(paste0("Convergence obtained after ", format(i_iter), " iterations. \n",
                      mess_criterion_met,
                      "Optimal marginal log-likelihood variational lower bound ",
-                     "(ELBO) = ", format(ELBO[i_iter]), ". \n\n"))
+                     "(ELBO) = ", format(ELBO_iter), ". \n\n"))
         }
 
         break
       } else if (i_iter == maxit) {
+        ELBO_last <- ELBO[i_iter]
         warning(paste0("Maximal number of iterations reached before convergence. Difference last consecutive ELBO values: ",
                        ELBO_diff, " Exit."))
       }
@@ -811,7 +833,8 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
                            factor_ppi,
                            list_cumulated_pve,
                            time_g, # C_g,
-                           ELBO, i_iter, n_g)
+                           ELBO_iter,
+                           i_iter, n_g)
 
 
 }
