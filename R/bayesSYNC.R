@@ -47,6 +47,8 @@
 #' @param bool_scale Whether to standardise the variables. The per-variable
 #'        within-individual means are first computed, their mean and sd across
 #'        individuals are obtained, and used to scale the measurements. Default is TRUE.
+#' @param bool_var_spec_prob Whether to use variable- (and factor-) specific
+#'        spike-and-slab probabilities. Default is TRUE.
 #'
 #' @return An object containing the resulting MFVB estimates.
 #'
@@ -72,7 +74,7 @@ bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
                                        tol_abs = 1e-3,
                                        tol_rel = 1e-5, maxit = 1000,
                                        n_cpus = 1, verbose = TRUE, seed = NULL,
-                                       bool_scale = TRUE) {
+                                       bool_scale = TRUE, bool_var_spec_prob = TRUE) {
 
   check_structure(model_choice, "vector", "string", 1)
   stopifnot(model_choice %in% c("Q", "L"))
@@ -148,6 +150,7 @@ bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
                     n_g = n_g, time_g = time_g, tol_abs = tol_abs, tol_rel = tol_rel,
                     maxit = maxit, n_cpus = n_cpus_inner,
                     verbose = verbose, seed = seed, bool_scale = bool_scale,
+                    bool_var_spec_prob = bool_var_spec_prob,
                     show_factor_ppi_progress = FALSE)
 
     }, mc.cores = n_cpus_outer)
@@ -172,6 +175,7 @@ bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
                 n_g = n_g, time_g = time_g, tol_abs = tol_abs, tol_rel = tol_rel,
                 maxit = maxit, n_cpus = n_cpus_inner,
                 verbose = verbose, seed = seed, bool_scale = bool_scale,
+                bool_var_spec_prob = bool_var_spec_prob,
                 show_factor_ppi_progress = FALSE)
 
     }, mc.cores = n_cpus_outer)
@@ -222,6 +226,8 @@ bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
 #' @param bool_scale Whether to standardise the variables. The per-variable
 #'        within-individual means are first computed, their mean and sd across
 #'        individuals are obtained, and used to scale the measurements. Default is TRUE.
+#' @param bool_var_spec_prob Whether to use variable- (and factor-) specific
+#'        spike-and-slab probabilities. Default is TRUE.
 #' @param show_factor_ppi_progress Whether to show a plot of the factor posterior
 #'        probabilities of inclusion as the algorithm progresses. Default is FALSE.
 #'
@@ -235,7 +241,7 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
                       tol_abs = 1e-3,
                       tol_rel = 1e-5, maxit = 1000, n_cpus = 1,
                       verbose = TRUE, seed = NULL,
-                      bool_scale = TRUE,
+                      bool_scale = TRUE, bool_var_spec_prob = TRUE,
                       show_factor_ppi_progress = FALSE) {
 
   check_structure(seed, "vector", "numeric", 1, null_ok = TRUE)
@@ -271,6 +277,9 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
   check_natural(maxit)
 
   check_structure(verbose, "vector", "logical", 1)
+  check_structure(bool_scale, "vector", "logical", 1)
+  check_structure(bool_var_spec_prob, "vector", "logical", 1)
+  check_structure(show_factor_ppi_progress, "vector", "logical", 1)
 
   N <- length(time_obs)
 
@@ -342,7 +351,8 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
   debug <- F # whether to throw an error when the ELBO is not increasing monotonically
 
   bayesSYNC_core(N = N, p=p, L=L, Q=Q, K=K, C = C, Y = Y, list_hyper,
-                 time_obs = time_obs, n_g =n_g, time_g = time_g, C_g = C_g,
+                 time_obs = time_obs, bool_var_spec_prob = bool_var_spec_prob,
+                 n_g =n_g, time_g = time_g, C_g = C_g,
                  tol_abs = tol_abs, tol_rel = tol_rel, maxit = maxit,
                  n_cpus = n_cpus, debug = debug, verbose = verbose,
                  show_factor_ppi_progress = show_factor_ppi_progress)
@@ -350,7 +360,8 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
 }
 
 
-bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g,
+bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs,
+                           bool_var_spec_prob, n_g, time_g,
                            C_g, tol_abs, tol_rel, maxit, n_cpus, debug, verbose,
                            show_factor_ppi_progress) {
 
@@ -590,12 +601,19 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
     mu_q_recip_a_phi <- kappa_q_a_phi/lambda_q_a_phi
     mu_q_log_a_phi <- log(lambda_q_a_phi)- digamma(kappa_q_a_phi)
 
-    cs_mu_q_gamma <- colSums(mu_q_gamma)
+    if (bool_var_spec_prob) {
+      c_1_omega <- c_0 + mu_q_gamma # p x Q matrix
+      d_1_omega <- d_0 + 1 - mu_q_gamma
 
-    c_1_omega <- c_0 + cs_mu_q_gamma
-    d_1_omega <- d_0 + p - cs_mu_q_gamma
+      dig <- digamma(c_0 + d_0 + 1)
+    } else {
+      cs_mu_q_gamma <- colSums(mu_q_gamma) # vector of length Q
+      c_1_omega <- c_0 + cs_mu_q_gamma
+      d_1_omega <- d_0 + p - cs_mu_q_gamma
 
-    dig <- digamma(c_0 + d_0 + p)
+      dig <- digamma(c_0 + d_0 + p)
+    }
+
     mu_q_log_omega <- digamma(c_1_omega) - dig
     mu_q_log_1_omega <- digamma(d_1_omega) - dig
 
@@ -638,9 +656,15 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
       Sigma_q_normal_b[,q] <- 1/(mu_q_recip_sigsq_eps * rs_tr_qi[q] + 1)
       mu_q_normal_b[,q] <- Sigma_q_normal_b[,q]*mu_q_recip_sigsq_eps*sum_mu_q
 
-      mu_q_gamma[,q] <- 1 / (1 + sqrt(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1) *
-                           exp(mu_q_log_1_omega[q]-mu_q_log_omega[q] -
-                                 0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)))
+      if (bool_var_spec_prob) {
+        mu_q_gamma[,q] <- 1 / (1 + sqrt(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1) *
+                             exp(mu_q_log_1_omega[,q]-mu_q_log_omega[,q] -
+                                   0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)))
+      } else {
+        mu_q_gamma[,q] <- 1 / (1 + sqrt(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1) *
+                                 exp(mu_q_log_1_omega[q]-mu_q_log_omega[q] -
+                                       0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)))
+      }
 
     }
     mu_q_b<- mu_q_gamma*mu_q_normal_b
@@ -687,10 +711,17 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs, n_g, time_g
       (1/2)*mu_q_log_a_eps -mu_q_recip_a_eps*(1/A^2-lambda_q_a_eps)-
       log(lambda_q_a_eps)-lgamma(0.5)+lgamma(1)+ 0.5*log(1/A^2))
 
-    elbo_b_g <- sum(0.5*mu_q_gamma*(log(Sigma_q_normal_b)+ 1) - 0.5*term_b +
-      sweep(mu_q_gamma, 2, mu_q_log_omega, "*") +
-      sweep(1 - mu_q_gamma, 2, mu_q_log_1_omega, "*") -
-      mu_q_gamma*log(mu_q_gamma + eps_elbo) - (1-mu_q_gamma)*log(1- mu_q_gamma + eps_elbo))
+    if (bool_var_spec_prob) {
+      elbo_b_g <- sum(0.5*mu_q_gamma*(log(Sigma_q_normal_b)+ 1) - 0.5*term_b +
+                        mu_q_gamma * mu_q_log_omega +
+                        (1 - mu_q_gamma) * mu_q_log_1_omega -
+                        mu_q_gamma*log(mu_q_gamma + eps_elbo) - (1-mu_q_gamma)*log(1- mu_q_gamma + eps_elbo))
+    } else {
+      elbo_b_g <- sum(0.5*mu_q_gamma*(log(Sigma_q_normal_b)+ 1) - 0.5*term_b +
+                        sweep(mu_q_gamma, 2, mu_q_log_omega, "*") +
+                        sweep(1 - mu_q_gamma, 2, mu_q_log_1_omega, "*") -
+                        mu_q_gamma*log(mu_q_gamma + eps_elbo) - (1-mu_q_gamma)*log(1- mu_q_gamma + eps_elbo))
+    }
 
     elbo_omega <- sum((c_0 - c_1_omega) * mu_q_log_omega + (d_0 - d_1_omega) * mu_q_log_1_omega +
       lbeta(c_1_omega, d_1_omega) - lbeta(c_0,d_0))
