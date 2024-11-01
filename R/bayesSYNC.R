@@ -260,7 +260,11 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
   check_natural(L)
 
   if (is.null(list_hyper)) {
-    list_hyper <- set_hyper(d_0 = p)
+    if (bool_var_spec_prob) {
+      list_hyper <- set_hyper(d_0 = p)
+    } else {
+      list_hyper <- set_hyper(d_0 = Q)
+    }
   } else if (!inherits(list_hyper, "hyper")) {
     stop(paste0("The provided list_hyper must be an object of class ",
                 "``hyper''. \n *** you must either use the ",
@@ -820,10 +824,18 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs,
     mu_q_b  <- res_orth$mu_q_b_norm # QUESTION
   }
 
+  omega_hat <- c_1_omega / (c_1_omega + d_1_omega)
   B_hat <- mu_q_b
   ppi <- mu_q_gamma
   rownames(B_hat) <- rownames(ppi) <- names(list_mu_hat) <- names(Y[[1]])
   colnames(B_hat) <- colnames(ppi) <- paste0("Factor_", 1:Q)
+
+  if (bool_var_spec_prob) {
+    rownames(omega_hat) <- names(Y[[1]])
+    colnames(omega_hat) <- paste0("Factor_", 1:Q)
+  } else {
+    names(omega_hat) <- paste0("Factor_", 1:Q)
+  }
 
   # probabilities of activity of each factor:
   factor_ppi <- 1 - colProds(1-ppi) # probability that each factor contains at least one contribution by a variable
@@ -861,6 +873,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs,
                            # lambda_q_a_eps, Sigma_q_normal_b,
                            B_hat,
                            ppi,
+                           omega_hat,
                            factor_ppi,
                            list_cumulated_pve,
                            time_g, # C_g,
