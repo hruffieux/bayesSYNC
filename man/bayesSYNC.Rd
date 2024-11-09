@@ -20,6 +20,7 @@ bayesSYNC(
   verbose = TRUE,
   seed = NULL,
   bool_scale = TRUE,
+  bool_var_spec_prob = TRUE,
   show_factor_ppi_progress = FALSE
 )
 }
@@ -63,6 +64,9 @@ the run. Default is TRUE.}
 \item{bool_scale}{Whether to standardise the variables. The per-variable
 within-individual means are first computed, their mean and sd across
 individuals are obtained, and used to scale the measurements. Default is TRUE.}
+
+\item{bool_var_spec_prob}{Whether to use variable- (and factor-) specific
+spike-and-slab probabilities. Default is TRUE.}
 
 \item{show_factor_ppi_progress}{Whether to show a plot of the factor posterior
 probabilities of inclusion as the algorithm progresses. Default is FALSE.}

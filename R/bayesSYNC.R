@@ -320,11 +320,14 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
 
     mean_mean_across_subjects <- colMeans(mean_per_subject)
     sd_mean_across_subjects <- colSds(mean_per_subject)
+    names(mean_mean_across_subjects) <- names(sd_mean_across_subjects) <- names(Y[[1]])
 
     Y <- lapply(1:N, function(i) { Y_i <- lapply(1:p, function(j) (Y[[i]][[j]] - mean_mean_across_subjects[j]) / sd_mean_across_subjects[j])
                                    names(Y_i) <- names(Y[[i]]); Y_i
     })
     names(Y) <- subj_names
+  } else {
+    mean_mean_across_subjects <- sd_mean_across_subjects <- NULL
   }
 
   grid_obj <- get_grid_objects(time_obs, K, n_g = n_g, time_g = time_g,
@@ -354,7 +357,9 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
 
   debug <- F # whether to throw an error when the ELBO is not increasing monotonically
 
-  bayesSYNC_core(N = N, p=p, L=L, Q=Q, K=K, C = C, Y = Y, list_hyper,
+  bayesSYNC_core(N = N, p=p, L=L, Q=Q, K=K, C = C, Y = Y,
+                 mean_mean_across_subjects, sd_mean_across_subjects,
+                 list_hyper,
                  time_obs = time_obs, bool_var_spec_prob = bool_var_spec_prob,
                  n_g =n_g, time_g = time_g, C_g = C_g,
                  tol_abs = tol_abs, tol_rel = tol_rel, maxit = maxit,
@@ -364,7 +369,8 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
 }
 
 
-bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs,
+bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
+                           sd_mean_across_subjects, list_hyper, time_obs,
                            bool_var_spec_prob, n_g, time_g,
                            C_g, tol_abs, tol_rel, maxit, n_cpus, debug, verbose,
                            show_factor_ppi_progress) {
@@ -877,6 +883,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, list_hyper, time_obs,
                            factor_ppi,
                            list_cumulated_pve,
                            time_g, # C_g,
+                           mean_mean_across_subjects, sd_mean_across_subjects, # if bool_scale = T, to be able to scale back to original scale if needed
                            ELBO_iter,
                            i_iter, n_g)
 

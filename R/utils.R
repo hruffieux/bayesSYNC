@@ -405,8 +405,8 @@ flip_sign <- function(vec_flip, list_Psi_hat, Zeta_hat, zeta_ellipse = NULL) {
 
   stopifnot(all(vec_flip == 1 | vec_flip == -1))
 
-  list_Psi_hat[seq_along(vec_flip)] <- lapply(seq_along(vec_flip), function(ll) {
-    list_Psi_hat[[ll]] * vec_flip[ll]
+  list_Psi_hat[,seq_along(vec_flip)] <- sapply(seq_along(vec_flip), function(ll) {
+    list_Psi_hat[,ll] * vec_flip[ll]
   })
 
   Zeta_hat[,seq_along(vec_flip)] <- sweep(Zeta_hat[,seq_along(vec_flip)], 2, vec_flip, "*")

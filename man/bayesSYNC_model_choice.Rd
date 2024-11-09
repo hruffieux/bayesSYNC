@@ -23,7 +23,8 @@ bayesSYNC_model_choice(
   n_cpus = 1,
   verbose = TRUE,
   seed = NULL,
-  bool_scale = TRUE
+  bool_scale = TRUE,
+  bool_var_spec_prob = TRUE
 )
 }
 \arguments{
@@ -86,6 +87,9 @@ the run.}
 \item{bool_scale}{Whether to standardise the variables. The per-variable
 within-individual means are first computed, their mean and sd across
 individuals are obtained, and used to scale the measurements. Default is TRUE.}
+
+\item{bool_var_spec_prob}{Whether to use variable- (and factor-) specific
+spike-and-slab probabilities. Default is TRUE.}
 }
 \value{
 An object containing the resulting MFVB estimates.
