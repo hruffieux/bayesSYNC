@@ -426,13 +426,17 @@ frobenius_norm <- function(A, B) {
 
 #' @export
 match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat,
-                                  list_list_Phi_hat, list_cumulated_pve) {
+                                  list_list_Phi_hat, list_cumulated_pve,
+                                  list_Cov_zeta_hat) {
 
-  perm_factor <- match_factors(B, B_hat, ppi, factor_ppi, list_Zeta_hat, list_list_Phi_hat, list_cumulated_pve)
+  perm_factor <- match_factors(B, B_hat, ppi, factor_ppi, list_Zeta_hat,
+                               list_list_Phi_hat, list_cumulated_pve,
+                               list_Cov_zeta_hat)
 
   best_perm <- perm_factor$best_perm
   perm_sign_factor <- perm_factor$perm_sign_factor
   perm_list_cumulated_pve <- perm_factor$perm_list_cumulated_pve
+  perm_list_Cov_zeta_hat <- perm_factor$perm_list_Cov_zeta_hat
 
   perm_B_hat <- perm_factor$perm_B_hat
   perm_ppi <- perm_factor$perm_ppi
@@ -453,7 +457,7 @@ match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat
   perm_list_list_Phi_hat <- perm_sign$perm_list_list_Phi_hat
 
   create_named_list(best_perm, perm_sign_factor, perm_sign_fpca, perm_factor_ppi,
-                    perm_list_cumulated_pve,
+                    perm_list_cumulated_pve, perm_list_Cov_zeta_hat,
                     perm_B_hat, perm_ppi, perm_list_Zeta_hat, perm_list_list_Phi_hat,
                     perm_B_hat_untrimmed, perm_ppi_untrimmed,
                     perm_list_Zeta_hat_untrimmed, perm_list_list_Phi_hat_untrimmed)
@@ -462,7 +466,7 @@ match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat
 
 #
 match_factors <- function(B, B_hat, ppi, factor_ppi, list_Zeta_hat,
-                          list_list_Phi_hat, list_cumulated_pve) {
+                          list_list_Phi_hat, list_cumulated_pve, list_Cov_zeta_hat) {
 
   Q_true <- ncol(B)
   Q <- ncol(B_hat)
@@ -517,13 +521,14 @@ match_factors <- function(B, B_hat, ppi, factor_ppi, list_Zeta_hat,
   perm_B_hat_untrimmed <- cbind(perm_B_hat, B_hat[, -best_perm, drop = F])
   perm_factor_ppi <- c(factor_ppi[best_perm], factor_ppi[-best_perm]) # posterior probabilities of inclusion of the permuted factors
   perm_list_cumulated_pve <- c(list_cumulated_pve[best_perm], list_cumulated_pve[-best_perm])
+  perm_list_Cov_zeta_hat <- c(list_Cov_zeta_hat[best_perm], list_Cov_zeta_hat[-best_perm])
 
   create_named_list(best_perm, perm_sign_factor, perm_factor_ppi,
                     perm_B_hat_untrimmed, perm_ppi_untrimmed,
                     perm_B_hat, perm_ppi,
                     perm_list_Zeta_hat, perm_list_list_Phi_hat,
                     perm_list_Zeta_hat_untrimmed, perm_list_list_Phi_hat_untrimmed,
-                    perm_list_cumulated_pve)
+                    perm_list_cumulated_pve, perm_list_Cov_zeta_hat)
 }
 
 
