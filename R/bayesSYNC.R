@@ -260,11 +260,7 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
   check_natural(L)
 
   if (is.null(list_hyper)) {
-    if (bool_var_spec_prob) {
-      list_hyper <- set_hyper(d_0 = p)
-    } else {
-      list_hyper <- set_hyper(d_0 = Q)
-    }
+    list_hyper <- set_hyper(d_0 = p)
   } else if (!inherits(list_hyper, "hyper")) {
     stop(paste0("The provided list_hyper must be an object of class ",
                 "``hyper''. \n *** you must either use the ",
