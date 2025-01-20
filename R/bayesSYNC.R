@@ -392,7 +392,6 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
   inv_Sigma_zeta <- 1/sigma_zeta^2*diag(L)
   inv_Sigma_beta <- solve(Sigma_beta)
 
-  # mu_q_zeta <- lapply(1:Q, function(q) matrix(0.5, nrow = N, ncol = L)) # <--- SJ's implementation
   # mu_q_zeta <- lapply(1:Q, function(q) matrix(0, nrow = N, ncol = L)) # can trigger decreasing ELBO as FPCA expansions might not be effectively learnt
   mu_q_zeta <- lapply(1:Q, function(q) matrix(rnorm(N*L, mean = 0, sd = 1), nrow = N, ncol = L))
   Sigma_q_zeta <- lapply(1:Q, function(q) lapply(1:N, function(i) diag(L)))
@@ -406,11 +405,15 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
 
   mu_q_normal_b <- matrix(rnorm(p*Q), nrow = p, ncol = Q)
   mu_q_b <- mu_q_normal_b
-  Sigma_q_normal_b <- mu_q_gamma <- matrix(1, nrow= p, ncol= Q) # # <--- SJ's implementation - start with all the variables contributing to all the factors in order to initiate the learning of the FPCA expansions
-  # Sigma_q_normal_b <- matrix(1, nrow = p, ncol = Q)
-  # mu_q_gamma <- matrix(0.5, nrow = p, ncol = Q)
 
-  # mu_q_nu_phi <- lapply(1:Q, function(q) matrix(0.5, nrow = K+2, ncol = L)) # <--- SJ's implementation
+  new_init <- T
+  if (new_init) {
+    Sigma_q_normal_b <- matrix(1, nrow = p, ncol = Q)
+    mu_q_gamma <- matrix(0.5, nrow = p, ncol = Q)
+  } else {
+    Sigma_q_normal_b <- mu_q_gamma <- matrix(1, nrow= p, ncol= Q) # # <--- SJ's implementation - start with all the variables contributing to all the factors in order to initiate the learning of the FPCA expansion
+  }
+
   # mu_q_nu_phi <- lapply(1:Q, function(q) matrix(0, nrow = K+2, ncol = L)) # can trigger decreasing ELBO as FPCA expansions might not be effectively learnt
   mu_q_nu_phi <- lapply(1:Q, function(q) matrix(rnorm((K+2)*L), nrow = K+2, ncol = L))
   mu_q_recip_a_mu <- mu_q_recip_a_eps <- rep(1, p)
