@@ -581,3 +581,16 @@ match_sign_components <- function(Zeta,
   }
   res <- create_named_list(perm_sign_fpca, perm_list_Zeta_hat, perm_list_list_Phi_hat)
 }
+
+
+log_one_plus_exp_ <- function(x) { # computes log(1 + exp(x)) avoiding
+  # numerical overflow
+  m <- x
+  m[x < 0] <- 0
+
+  log(exp(x - m) + exp(- m)) + m
+}
+
+log1pExp <- function(x) {
+  ifelse(x > 0, x + log1p(exp(-x)), log1p(exp(x)))
+}

@@ -407,8 +407,8 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
   mu_q_normal_b <- matrix(rnorm(p*Q), nrow = p, ncol = Q)
   mu_q_b <- mu_q_normal_b
   Sigma_q_normal_b <- mu_q_gamma <- matrix(1, nrow= p, ncol= Q) # # <--- SJ's implementation - start with all the variables contributing to all the factors in order to initiate the learning of the FPCA expansions
-  # Sigma_q_normal_b <- matrix(1, nrow = p, ncol = Q)
-  # mu_q_gamma <- matrix(0.5, nrow = p, ncol = Q)
+  # Sigma_q_normal_b <- matrix(1, nrow = p, ncol = Q)#############
+  # mu_q_gamma <- matrix(0.5, nrow = p, ncol = Q) ###########
 
   # mu_q_nu_phi <- lapply(1:Q, function(q) matrix(0.5, nrow = K+2, ncol = L)) # <--- SJ's implementation
   # mu_q_nu_phi <- lapply(1:Q, function(q) matrix(0, nrow = K+2, ncol = L)) # can trigger decreasing ELBO as FPCA expansions might not be effectively learnt
@@ -663,24 +663,50 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
       mu_q_normal_b[,q] <- Sigma_q_normal_b[,q]*mu_q_recip_sigsq_eps*sum_mu_q
 
 
-      # if (bool_var_spec_prob) {
-      #   mu_q_gamma[,q] <- 1 / (1 + sqrt(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1) *
-      #                        exp(mu_q_log_1_omega[,q]-mu_q_log_omega[,q] -
-      #                              0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)))
-      # } else {
-      #   mu_q_gamma[,q] <- 1 / (1 + sqrt(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1) *
-      #                            exp(mu_q_log_1_omega[q]-mu_q_log_omega[q] -
-      #                                  0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)))
-      # }
+
       if (bool_var_spec_prob) {
-        mu_q_gamma[,q] <- 1 / (1 + sqrt(1/Sigma_q_normal_b[,q]) *
-                                 exp(mu_q_log_1_omega[,q]-mu_q_log_omega[,q] -
-                                       0.5*(mu_q_normal_b[,q]^2)/Sigma_q_normal_b[,q]))
+        mu_q_gamma[,q] <- 1 / (1 + exp(mu_q_log_1_omega[,q]-mu_q_log_omega[,q] -
+                                       0.5*mu_q_normal_b[,q]^2/Sigma_q_normal_b[,q] -
+                                         log(sqrt(Sigma_q_normal_b[,q]))))
       } else {
-        mu_q_gamma[,q] <- 1 / (1 + sqrt(1/Sigma_q_normal_b[,q]) *
-                                 exp(mu_q_log_1_omega[q]-mu_q_log_omega[q] -
-                                       0.5*(mu_q_normal_b[,q]^2)/Sigma_q_normal_b[,q]))
+        mu_q_gamma[,q] <- 1 / (1 + exp(mu_q_log_1_omega[q]-mu_q_log_omega[q] -
+                                       0.5*mu_q_normal_b[,q]^2/Sigma_q_normal_b[,q] -
+                                       log(sqrt(Sigma_q_normal_b[,q]))))
       }
+
+
+      # version with annealing
+      # if (bool_var_spec_prob) {
+      #   mu_q_gamma[,q] <- exp(-log_one_plus_exp_(c * (mu_q_log_1_omega[,q]-mu_q_log_omega[,q] -
+      #                                              0.5*mu_q_normal_b[,q]^2/Sigma_q_normal_b[,q] -
+      #                                              log(sqrt(Sigma_q_normal_b[,q])))))
+      # } else {
+      #   mu_q_gamma[,q] <- exp(-log_one_plus_exp_(c * (mu_q_log_1_omega[q]-mu_q_log_omega[q] -
+      #                                              0.5*mu_q_normal_b[,q]^2/Sigma_q_normal_b[,q] -
+      #                                              log(sqrt(Sigma_q_normal_b[,q])))))
+      # }
+
+
+      # probably not needed
+      # if (bool_var_spec_prob) {
+      #   mu_q_gamma[,q] <- exp(-log_one_plus_exp_(mu_q_log_1_omega[,q]-mu_q_log_omega[,q] -
+      #                                    0.5*mu_q_normal_b[,q]^2/Sigma_q_normal_b[,q] -
+      #                                    log(sqrt(Sigma_q_normal_b[,q]))))
+      # } else {
+      #   mu_q_gamma[,q] <- exp(-log_one_plus_exp_(mu_q_log_1_omega[q]-mu_q_log_omega[q] -
+      #                                    0.5*mu_q_normal_b[,q]^2/Sigma_q_normal_b[,q] -
+      #                                    log(sqrt(Sigma_q_normal_b[,q]))))
+      # }
+      #
+      # if (bool_var_spec_prob) {
+      #   mu_q_gamma[,q] <- exp(-log1pExp(mu_q_log_1_omega[,q]-mu_q_log_omega[,q] -
+      #                                              0.5*mu_q_normal_b[,q]^2/Sigma_q_normal_b[,q] -
+      #                                              log(sqrt(Sigma_q_normal_b[,q]))))
+      # } else {
+      #   mu_q_gamma[,q] <- exp(-log1pExp(mu_q_log_1_omega[q]-mu_q_log_omega[q] -
+      #                                              0.5*mu_q_normal_b[,q]^2/Sigma_q_normal_b[,q] -
+      #                                              log(sqrt(Sigma_q_normal_b[,q]))))
+      # }
 
     }
     mu_q_b<- mu_q_gamma*mu_q_normal_b
