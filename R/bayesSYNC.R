@@ -662,14 +662,24 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
       Sigma_q_normal_b[,q] <- 1/(mu_q_recip_sigsq_eps * rs_tr_qi[q] + 1)
       mu_q_normal_b[,q] <- Sigma_q_normal_b[,q]*mu_q_recip_sigsq_eps*sum_mu_q
 
+
+      # if (bool_var_spec_prob) {
+      #   mu_q_gamma[,q] <- 1 / (1 + sqrt(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1) *
+      #                        exp(mu_q_log_1_omega[,q]-mu_q_log_omega[,q] -
+      #                              0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)))
+      # } else {
+      #   mu_q_gamma[,q] <- 1 / (1 + sqrt(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1) *
+      #                            exp(mu_q_log_1_omega[q]-mu_q_log_omega[q] -
+      #                                  0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)))
+      # }
       if (bool_var_spec_prob) {
-        mu_q_gamma[,q] <- 1 / (1 + sqrt(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1) *
-                             exp(mu_q_log_1_omega[,q]-mu_q_log_omega[,q] -
-                                   0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)))
+        mu_q_gamma[,q] <- 1 / (1 + sqrt(1/Sigma_q_normal_b[,q]) *
+                                 exp(mu_q_log_1_omega[,q]-mu_q_log_omega[,q] -
+                                       0.5*(mu_q_normal_b[,q]^2)/Sigma_q_normal_b[,q]))
       } else {
-        mu_q_gamma[,q] <- 1 / (1 + sqrt(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1) *
+        mu_q_gamma[,q] <- 1 / (1 + sqrt(1/Sigma_q_normal_b[,q]) *
                                  exp(mu_q_log_1_omega[q]-mu_q_log_omega[q] -
-                                       0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)))
+                                       0.5*(mu_q_normal_b[,q]^2)/Sigma_q_normal_b[,q]))
       }
 
     }
