@@ -558,7 +558,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
 
     lambda_q_sigsq_eps <- mu_q_recip_a_eps + simplify2array(parallel::mclapply(1:p, function(j) {
       0.5 * sum(sapply(1:N, function(i) {
-        sum_i_j <- list_cp_Y[i,j]-
+        sum_i_j <- list_cp_Y[i,j] -
           2*crossprod(mu_q_nu_mu[[j]] +
                         Reduce("+",
                                lapply(1:Q, function(q) mu_q_b[j,q]*list_tcp_nu_phi_zeta[[q]][,i])), list_cp_C_Y[[i]][,j]) +
@@ -665,14 +665,23 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
       Sigma_q_normal_b[,q] <- 1/(mu_q_recip_sigsq_eps * rs_tr_qi[q] + 1)
       mu_q_normal_b[,q] <- Sigma_q_normal_b[,q]*mu_q_recip_sigsq_eps*sum_mu_q
 
+      # if (bool_var_spec_prob) {
+      #   mu_q_gamma[,q] <- 1 / (1 + sqrt(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1) *
+      #                        exp(mu_q_log_1_omega[,q]-mu_q_log_omega[,q] -
+      #                              0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)))
+      # } else {
+      #   mu_q_gamma[,q] <- 1 / (1 + sqrt(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1) *
+      #                            exp(mu_q_log_1_omega[q]-mu_q_log_omega[q] -
+      #                                  0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)))
+      # }
       if (bool_var_spec_prob) {
-        mu_q_gamma[,q] <- 1 / (1 + sqrt(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1) *
-                             exp(mu_q_log_1_omega[,q]-mu_q_log_omega[,q] -
-                                   0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)))
+        mu_q_gamma[,q] <- 1 / (1 + sqrt(1/Sigma_q_normal_b[,q]) *
+                                 exp(mu_q_log_1_omega[,q]-mu_q_log_omega[,q] -
+                                       0.5*(mu_q_normal_b[,q]^2)/Sigma_q_normal_b[,q]))
       } else {
-        mu_q_gamma[,q] <- 1 / (1 + sqrt(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1) *
+        mu_q_gamma[,q] <- 1 / (1 + sqrt(1/Sigma_q_normal_b[,q]) *
                                  exp(mu_q_log_1_omega[q]-mu_q_log_omega[q] -
-                                       0.5*(mu_q_normal_b[,q]^2)*(mu_q_recip_sigsq_eps*rs_tr_qi[q]+ 1)))
+                                       0.5*(mu_q_normal_b[,q]^2)/Sigma_q_normal_b[,q]))
       }
 
     }
