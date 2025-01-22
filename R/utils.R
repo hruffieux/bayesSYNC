@@ -594,3 +594,79 @@ log_one_plus_exp_ <- function(x) { # computes log(1 + exp(x)) avoiding
 log1pExp <- function(x) {
   ifelse(x > 0, x + log1p(exp(-x)), log1p(exp(x)))
 }
+
+
+get_annealing_ladder_ <- function(anneal, verbose) {
+
+  # ladder set following:
+  # Importance Tempering, Robert B. Gramacy & Richard J. Samworth, pp.9-10, arxiv v4
+
+  k_m <- 1 / anneal[2]
+  m <- anneal[3]
+
+  if(anneal[1] == 1) {
+
+    type <- "geometric"
+
+    delta_k <- k_m^(1 / (1 - m)) - 1
+
+    ladder <- (1 + delta_k)^(1 - m:1)
+
+  } else if (anneal[1] == 2) { # harmonic spacing
+
+    type <- "harmonic"
+
+    delta_k <- ( 1 / k_m - 1) / (m - 1)
+
+    ladder <- 1 / (1 + delta_k * (m:1 - 1))
+
+  } else { # linear spacing
+
+    type <- "linear"
+
+    delta_k <- (1 - k_m) / (m - 1)
+
+    ladder <- k_m + delta_k * (1:m - 1)
+  }
+
+  if (verbose != 0)
+    cat(paste0("** Annealing with ", type," spacing ** \n\n"))
+
+  ladder
+
+}
+
+# Internal function implementing sanity checks for the annealing schedule
+# specification.
+#
+check_annealing <- function(anneal, verbose) {
+
+  check_structure(anneal, "vector", "numeric", 3, null_ok = TRUE)
+
+  if (!is.null(anneal)) {
+
+    if (verbose) cat("== Checking the annealing schedule ... \n\n")
+
+    check_natural(anneal[c(1, 3)])
+    check_positive(anneal[2])
+
+    if (!(anneal[1] %in% 1:3))
+      stop(paste0("The annealing spacing scheme must be set to 1 for geometric ",
+                  "2 for harmonic or 3 for linear spacing."))
+
+    if (anneal[2] < 1.5)
+      stop(paste0("Initial annealing temperature very small. May not be large ",
+                  "enough for a successful exploration. Please increase it or ",
+                  "select no annealing."))
+
+    if (anneal[3] > 1000)
+      stop(paste0("Temperature grid size very large. This may be unnecessarily ",
+                  "computationally demanding. Please decrease it."))
+
+    if (verbose) cat("... done. == \n\n")
+
+
+  }
+
+}
+
