@@ -654,10 +654,9 @@ check_annealing <- function(anneal, verbose) {
       stop(paste0("The annealing spacing scheme must be set to 1 for geometric ",
                   "2 for harmonic or 3 for linear spacing."))
 
-    if (anneal[2] < 1.5)
-      stop(paste0("Initial annealing temperature very small. May not be large ",
-                  "enough for a successful exploration. Please increase it or ",
-                  "select no annealing."))
+    if (anneal[2] >= 2)
+      stop(paste0("Initial annealing temperature must be strictly smaller than 2.",
+                  "Please decrease it."))
 
     if (anneal[3] > 1000)
       stop(paste0("Temperature grid size very large. This may be unnecessarily ",
