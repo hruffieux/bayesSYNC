@@ -406,9 +406,11 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
 
   mu_q_normal_b <- matrix(rnorm(p*Q), nrow = p, ncol = Q)
   mu_q_b <- mu_q_normal_b
-  Sigma_q_normal_b <- mu_q_gamma <- matrix(1, nrow= p, ncol= Q) # # <--- SJ's implementation - start with all the variables contributing to all the factors in order to initiate the learning of the FPCA expansions
-  # Sigma_q_normal_b <- matrix(1, nrow = p, ncol = Q)#############
-  # mu_q_gamma <- matrix(0.5, nrow = p, ncol = Q) ###########
+  # Sigma_q_normal_b <- mu_q_gamma <- matrix(1, nrow= p, ncol= Q) # # <--- SJ's implementation - start with all the variables contributing to all the factors in order to initiate the learning of the FPCA expansions
+  Sigma_q_normal_b <- matrix(1, nrow = p, ncol = Q) ## <-------
+  mu_q_gamma <- matrix(0.5, nrow = p, ncol = Q) ## <-------
+  mu_q_b <- mu_q_gamma*mu_q_normal_b
+  term_b <- (Sigma_q_normal_b + mu_q_normal_b^2)*mu_q_gamma
 
   # mu_q_nu_phi <- lapply(1:Q, function(q) matrix(0.5, nrow = K+2, ncol = L)) # <--- SJ's implementation
   # mu_q_nu_phi <- lapply(1:Q, function(q) matrix(0, nrow = K+2, ncol = L)) # can trigger decreasing ELBO as FPCA expansions might not be effectively learnt
@@ -421,8 +423,6 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
 
   list_cp_C_Y <- parallel::mclapply(1:N, function(i) sapply(1:p, function(j) crossprod(C[[i]], Y[[i]][[j]])), mc.cores = n_cpus)
   list_cp_Y <- simplify2array(parallel::mclapply(1:p, function(j) sapply(1:N, function(i) crossprod(Y[[i]][[j]])), mc.cores = n_cpus))
-
-  term_b <- (Sigma_q_normal_b + mu_q_normal_b^2)*mu_q_gamma
 
   inv_Sigma_q_nu_mu <- parallel::mclapply(1:p, function(j) blkdiag(inv_Sigma_beta,
                                                                    mu_q_recip_sigsq_mu[j]*diag(K)), mc.cores = n_cpus)
@@ -553,29 +553,32 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
     list_tcp_nu_phi_zeta <- parallel::mclapply(1:Q, function(q) tcrossprod(mu_q_nu_phi[[q]], mu_q_zeta[[q]]), mc.cores = n_cpus)
 
 
-    lambda_q_sigsq_eps <- mu_q_recip_a_eps + simplify2array(parallel::mclapply(1:p, function(j) {
-      0.5 * sum(sapply(1:N, function(i) {
-        sum_i_j <- list_cp_Y[i,j]-
-          2*crossprod(mu_q_nu_mu[[j]] +
-                        Reduce("+",
-                               lapply(1:Q, function(q) mu_q_b[j,q]*list_tcp_nu_phi_zeta[[q]][,i])), list_cp_C_Y[[i]][,j]) +
-          crossprod(mu_q_nu_mu[[j]], list_cp_C_nu_mu[[i]][,j]) + tr(crossprod(list_cp_C[[i]], Sigma_q_nu_mu[[j]])) +
-          2*crossprod(Reduce("+",
-                             lapply(1:Q, function(q) mu_q_b[j,q]*list_tcp_nu_phi_zeta[[q]][,i])), list_cp_C_nu_mu[[i]][,j])
+    lambda_q_sigsq_eps <- c * (mu_q_recip_a_eps + simplify2array(parallel::mclapply(1:p, function(j) {
+
+      term_sum <- 0.5 * sum(sapply(1:N, function(i) {
+        # precompute reusable terms
+        mu_q_b_contrib <- Reduce("+", lapply(1:Q, function(q) mu_q_b[j, q] * list_tcp_nu_phi_zeta[[q]][, i]))
+        term_1 <- crossprod(mu_q_nu_mu[[j]], list_cp_C_nu_mu[[i]][, j]) +
+          tr(crossprod(list_cp_C[[i]], Sigma_q_nu_mu[[j]]))
+        term_2 <- crossprod(mu_q_b_contrib, list_cp_C_nu_mu[[i]][, j])
+
+        sum_i_j <- list_cp_Y[i, j] -
+          2 * crossprod(mu_q_nu_mu[[j]] + mu_q_b_contrib, list_cp_C_Y[[i]][, j]) +
+          term_1 + 2 * term_2
 
         if (Q > 1) {
-          sum_i_j +  Reduce("+", lapply(1:Q, function(q) {
-            sum_val_phi <- term_b[j, q]*tr_qi[q, i]
+          sum_val_phi <- Reduce("+", lapply(1:Q, function(q) {
+            term_phi <- term_b[j, q] * tr_qi[q, i]
             sum_val_phi_q_tilde <- Reduce("+", lapply(setdiff(1:Q, q), function(q_tilde) {
-                           mu_q_b[j,q_tilde]*C[[i]]%*%list_tcp_nu_phi_zeta[[q_tilde]][,i]
-                         }))
-            sum_val_phi + mu_q_b[j, q]*crossprod(C[[i]] %*% list_tcp_nu_phi_zeta[[q]][,i], sum_val_phi_q_tilde)
-                     }))
+              mu_q_b[j, q_tilde] * C[[i]] %*% list_tcp_nu_phi_zeta[[q_tilde]][, i]
+            }))
+            term_phi + mu_q_b[j, q] * crossprod(C[[i]] %*% list_tcp_nu_phi_zeta[[q]][, i], sum_val_phi_q_tilde)
+          }))
+          sum_i_j + sum_val_phi
         } else {
-          sum_i_j + term_b[j, q]*tr_qi[q, i]
+          sum_i_j + term_b[j, q] * tr_qi[q, i]
         }
-      }))
-    }, mc.cores = n_cpus))
+      }))}, mc.cores = n_cpus)))
 
     mu_q_recip_sigsq_eps <- kappa_q_sigsq_eps/lambda_q_sigsq_eps
     mu_q_log_sigsq_eps <- log(lambda_q_sigsq_eps)-digamma(kappa_q_sigsq_eps)
@@ -638,7 +641,6 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
 
     #Update of q(b_jq |gamma_jq)
     rs_tr_qi <- rowSums(tr_qi)
-    Sigma_q_b <- matrix(NA, nrow=p, ncol=Q)
     # list_tcp_nu_phi_zeta <- parallel::mclapply(1:Q, function(q_tilde) tcrossprod(mu_q_nu_phi[[q_tilde]], mu_q_zeta[[q_tilde]]), mc.cores = n_cpus)
 
     for(q in 1:Q){
@@ -711,7 +713,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
     }
     mu_q_b<- mu_q_gamma*mu_q_normal_b
     term_b <- (Sigma_q_normal_b + mu_q_normal_b^2)*mu_q_gamma
-    Sigma_q_b <- term_b - mu_q_b^2
+    # Sigma_q_b <- term_b - mu_q_b^2
 
     inv_Sigma_q_nu_mu <- parallel::mclapply(1:p, function(j) blkdiag(inv_Sigma_beta,
                                                                            mu_q_recip_sigsq_mu[j]*diag(K)), mc.cores = n_cpus)
