@@ -478,9 +478,15 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
 
       sum_term_mu_j <- rowSums(sapply(1:N, function(i) {
 
-        sum_val_i_j <- rowSums(sapply(1:Q, function(q) {
+        tmp <- sapply(1:Q, function(q) {
           rowSums(mu_q_b[j,q]*list_sweep[[q]][[i]])
-        }))
+        })
+
+        if (is.vector(tmp)) {
+          sum_val_i_j <- sum(tmp)
+        } else {
+          sum_val_i_j <- rowSums(tmp)
+        }
 
         list_cp_C_Y[[i]][,j] - crossprod(C[[i]], sum_val_i_j)
 
@@ -702,7 +708,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
       }
 
     }
-    mu_q_b<- mu_q_gamma*mu_q_normal_b
+    mu_q_b <- mu_q_gamma * mu_q_normal_b
     term_b <- (Sigma_q_normal_b + mu_q_normal_b^2)*mu_q_gamma
     # Sigma_q_b <- term_b - mu_q_b^2
 
@@ -714,7 +720,8 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
 
 
     if (show_factor_ppi_progress) {
-      factor_ppi_progress <- rbind(factor_ppi_progress, 1 - colProds(1-mu_q_gamma))
+      factor_ppi_progress <- rbind(factor_ppi_progress, 1 - exp(colSums(log1p(-mu_q_gamma)))) # more robust to underflow/overflow
+                                                        # 1 - colProds(1-mu_q_gamma))
 
       disp <- Q %/% 5 + 1 # integer division
       par(mfrow= c(ceiling(Q/disp), disp))
@@ -889,7 +896,8 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
   }
 
   # probabilities of activity of each factor:
-  factor_ppi <- 1 - colProds(1-ppi) # probability that each factor contains at least one contribution by a variable
+  factor_ppi <- 1 - exp(colSums(log1p(-ppi))) # more robust to underflow/overflow
+    # 1 - colProds(1-ppi) # probability that each factor contains at least one contribution by a variable
 
   list_eigenvalues <- lapply(list_Zeta_hat, function(Zeta_hat) apply(Zeta_hat, 2, function(vv) var(vv)))
   list_cumulated_pve <- lapply(list_eigenvalues, function(eigenvalues) cumsum(eigenvalues) / sum(eigenvalues) * 100)
