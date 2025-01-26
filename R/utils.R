@@ -655,7 +655,7 @@ check_annealing <- function(anneal, verbose) {
                   "2 for harmonic or 3 for linear spacing."))
 
     if (anneal[2] >= 2)
-      stop(paste0("Initial annealing temperature must be strictly smaller than 2.",
+      stop(paste0("Initial annealing temperature must be strictly smaller than 2.\n ",
                   "Please decrease it."))
 
     if (anneal[3] > 1000)

@@ -34,7 +34,7 @@
 #'   entry is the type of schedule: 1 = geometric spacing (default),
 #'   2 = harmonic spacing or 3 = linear spacing, the second entry is the initial
 #'   temperature which must lie in the interval (0, 2) (default is 1.9), and the
-#'   third entry is the temperature grid size (default is 10). If \code{NULL},
+#'   third entry is the temperature grid size (default is 100). If \code{NULL},
 #'   no annealing is performed.
 #' @param list_hyper Hyperparameter settings constructed using the function
 #'         \code{\link{set_hyper}}. If \code{NULL} default hyperparameters will
@@ -75,7 +75,7 @@
 #' @export
 #'
 bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
-                                   anneal = c(1, 1.9, 10),
+                                   anneal = c(1, 1.9, 100),
                                        list_hyper = NULL,
                                        n_g = 1000, time_g = NULL,
                                        tol_abs = 1e-3,
@@ -221,7 +221,7 @@ bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
 #'   entry is the type of schedule: 1 = geometric spacing (default),
 #'   2 = harmonic spacing or 3 = linear spacing, the second entry is the initial
 #'   temperature which must lie in the interval (0, 2) (default is 1.9), and the
-#'   third entry is the temperature grid size (default is 10). If \code{NULL},
+#'   third entry is the temperature grid size (default is 100). If \code{NULL},
 #'   no annealing is performed.
 #' @param list_hyper Hyperparameter settings constructed using the function
 #'         \code{\link{set_hyper}}. If \code{NULL}, default hyperparameters will be used.
@@ -249,7 +249,7 @@ bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
 #' @export
 #'
 bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
-                      anneal = c(1, 2, 10),
+                      anneal = c(1, 1.9, 100),
                       list_hyper = NULL,
                       n_g = 1000, time_g = NULL,
                       tol_abs = 1e-3,
