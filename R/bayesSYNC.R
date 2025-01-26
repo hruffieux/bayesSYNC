@@ -313,8 +313,8 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
 
   if (is.null(K)) {  # Ruppert (2002) sets a simple default value for K as min(nobs/4,40), where nobs is the number of observations.
     # here since nobs differs for each i, we take the nobs / 4 = round(median(obs_i)/4), and do this for each variable j = 1, ..., p
-    # and we enforce that K>=7
-    K <- max(round(min(median(sapply(time_obs, function(time_obs_i) length(time_obs_i))/4), 40)), 7)
+    # and we enforce that K>=10
+    K <- max(round(min(median(sapply(time_obs, function(time_obs_i) length(time_obs_i))/4), 40)), 10)
 
     # if supplied K is such that length(K) = 1, then will be set to K <- rep(K, p)
   } else {
@@ -427,10 +427,9 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
   mu_q_recip_sigsq_phi <- matrix(1, nrow = Q, ncol = L)
 
   mu_q_normal_b <- matrix(rnorm(p*Q), nrow = p, ncol = Q)
-  # mu_q_b <- mu_q_normal_b
-  # Sigma_q_normal_b <- mu_q_gamma <- matrix(1, nrow= p, ncol= Q) # # <--- SJ's implementation - start with all the variables contributing to all the factors in order to initiate the learning of the FPCA expansions
-  Sigma_q_normal_b <- matrix(1, nrow = p, ncol = Q) ## <-------
-  mu_q_gamma <- matrix(0.5, nrow = p, ncol = Q) ## <-------
+
+  Sigma_q_normal_b <- matrix(1, nrow = p, ncol = Q)
+  mu_q_gamma <- matrix(0.5, nrow = p, ncol = Q)
   mu_q_b <- mu_q_gamma*mu_q_normal_b
   term_b <- (Sigma_q_normal_b + mu_q_normal_b^2)*mu_q_gamma
 
