@@ -10,7 +10,7 @@ bayesSYNC(
   L,
   Q,
   K = NULL,
-  anneal = c(1, 2, 10),
+  anneal = c(1, 1.9, 100),
   list_hyper = NULL,
   n_g = 1000,
   time_g = NULL,
@@ -44,7 +44,7 @@ rule of Ruppert (2002), also enforcing K >=7.}
 entry is the type of schedule: 1 = geometric spacing (default),
 2 = harmonic spacing or 3 = linear spacing, the second entry is the initial
 temperature which must lie in the interval (0, 2) (default is 1.9), and the
-third entry is the temperature grid size (default is 10). If \code{NULL},
+third entry is the temperature grid size (default is 100). If \code{NULL},
 no annealing is performed.}
 
 \item{list_hyper}{Hyperparameter settings constructed using the function

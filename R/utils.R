@@ -456,6 +456,21 @@ match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat
   perm_list_Zeta_hat <- perm_sign$perm_list_Zeta_hat
   perm_list_list_Phi_hat <- perm_sign$perm_list_list_Phi_hat
 
+  bool_rescale_loadings_and_scores <- T # so they match the simulated loadings and scores, respectively
+  if (bool_rescale_loadings_and_scores) {
+    # B is identifiable up to multiplicative sign on its columns
+    norm_col_B <- sqrt(colSums(B^2)) # this is unknown in practice.
+    norm_col_B_hat <- sqrt(colSums(perm_B_hat^2))
+
+    Q_true <- ncol(B)
+    for (q in 1:Q_true) {
+      perm_B_hat[,q] <- perm_B_hat_untrimmed[,q] <- perm_B_hat[,q] * norm_col_B[q] / norm_col_B_hat[q]
+      perm_list_Zeta_hat[[q]] <- perm_list_Zeta_hat_untrimmed[[q]] <- perm_list_Zeta_hat[[q]] * norm_col_B_hat[q] / norm_col_B[q]
+      perm_list_Cov_zeta_hat[[q]] <- lapply(perm_list_Cov_zeta_hat[[q]], function(perm_list_Cov_zeta_hat_q_i)  perm_list_Cov_zeta_hat_q_i * norm_col_B_hat[q]^2 / norm_col_B[q]^2)# check
+    }
+
+  }
+
   create_named_list(best_perm, perm_sign_factor, perm_sign_fpca, perm_factor_ppi,
                     perm_list_cumulated_pve, perm_list_Cov_zeta_hat,
                     perm_B_hat, perm_ppi, perm_list_Zeta_hat, perm_list_list_Phi_hat,

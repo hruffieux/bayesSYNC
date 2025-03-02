@@ -878,10 +878,6 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
   list_Cov_zeta_hat <- res_orth$list_Cov_zeta_hat
   list_list_zeta_ellipse <- res_orth$list_list_zeta_ellipse
 
-  if (!is.null(res_orth$mu_q_b_norm)) {
-    mu_q_b  <- res_orth$mu_q_b_norm # QUESTION
-  }
-
   omega_hat <- c_1_omega / (c_1_omega + d_1_omega)
   B_hat <- mu_q_b
   ppi <- mu_q_gamma
@@ -981,17 +977,6 @@ orthonormalise <- function(N, p, Q, L, time_g, C_g, # see what she has used?
 
   list_Y_mat <- lapply(1:p, function(j) { list_mu_mat[[j]] +
       Reduce('+', lapply(1:Q, function(q) mu_q_b[j, q] * tcrossprod(list_M_q_Phi[[q]], list_M_q_Zeta[[q]])))})
-
-  bool_sim <- F # deal with identifiability. renormalise B and zeta. dirty - valid only for simulations, and B should be passed as an argument
-  if (bool_sim) {
-    # B is identifiable up to multiplicative sign on its columns
-    norm_col_B <- sqrt(colSums(B^2)) # this is unknown in practice.
-    norm_mu_q_b <- sqrt(colSums(mu_q_b^2))
-    mu_q_b_norm <- sapply(1:Q, function(q) mu_q_b[,q] * norm_col_B[q] / norm_mu_q_b[q])
-    list_M_q_Zeta <- lapply(1:Q, function(q) list_M_q_Zeta[[q]] * norm_mu_q_b[q] / norm_col_B[q])
-  } else {
-    mu_q_b_norm <- NULL
-  }
 
   list_M_q_Phi_svd <- lapply(list_M_q_Phi, function(M_q_Phi) svd(M_q_Phi))
   list_U_orth <- lapply(list_M_q_Phi_svd, function(M_q_Phi_svd) M_q_Phi_svd$u)
@@ -1164,6 +1149,5 @@ orthonormalise <- function(N, p, Q, L, time_g, C_g, # see what she has used?
   create_named_list(list_Y_hat, list_Y_low, list_Y_upp,
                     list_h_hat, list_h_low, list_h_upp,
                     list_mu_hat, list_list_Phi_hat,
-                    list_Zeta_hat, list_Cov_zeta_hat, list_list_zeta_ellipse,
-                    mu_q_b_norm)
+                    list_Zeta_hat, list_Cov_zeta_hat, list_list_zeta_ellipse)
 }
