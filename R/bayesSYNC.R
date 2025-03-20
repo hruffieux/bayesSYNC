@@ -255,7 +255,7 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
                       tol_abs = 1e-3,
                       tol_rel = 1e-5, maxit = 1000, n_cpus = 1,
                       verbose = TRUE, seed = NULL,
-                      bool_scale = TRUE, bool_var_spec_prob = TRUE,
+                      bool_scale = TRUE, bool_var_spec_prob = FALSE,
                       show_factor_ppi_progress = FALSE) {
 
   check_structure(seed, "vector", "numeric", 1, null_ok = TRUE)
@@ -877,6 +877,7 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
   list_Zeta_hat <- res_orth$list_Zeta_hat
   list_Cov_zeta_hat <- res_orth$list_Cov_zeta_hat
   list_list_zeta_ellipse <- res_orth$list_list_zeta_ellipse
+  list_var_vec <- res_orth$list_var_vec
 
   omega_hat <- c_1_omega / (c_1_omega + d_1_omega)
   B_hat <- mu_q_b
@@ -936,7 +937,8 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
                            ELBO_iter,
                            i_iter,
                            n_g,
-                           anneal)
+                           anneal,
+                           list_var_vec)
 
 
 }
@@ -1149,5 +1151,6 @@ orthonormalise <- function(N, p, Q, L, time_g, C_g, # see what she has used?
   create_named_list(list_Y_hat, list_Y_low, list_Y_upp,
                     list_h_hat, list_h_low, list_h_upp,
                     list_mu_hat, list_list_Phi_hat,
-                    list_Zeta_hat, list_Cov_zeta_hat, list_list_zeta_ellipse)
+                    list_Zeta_hat, list_Cov_zeta_hat, list_list_zeta_ellipse,
+                    list_var_vec)
 }

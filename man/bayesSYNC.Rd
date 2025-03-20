@@ -21,7 +21,7 @@ bayesSYNC(
   verbose = TRUE,
   seed = NULL,
   bool_scale = TRUE,
-  bool_var_spec_prob = TRUE,
+  bool_var_spec_prob = FALSE,
   show_factor_ppi_progress = FALSE
 )
 }
