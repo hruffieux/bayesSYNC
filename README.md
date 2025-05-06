@@ -4,7 +4,7 @@
 prevents from committing if the README.Rmd has changed, but has not been 
 re-knitted to generate an updated README.md -->
 
-## bayesSYNC - A Bayesian functional factor model for high-dimensional molecular curves
+## bayesSYNC - A Bayesian functional factor model for high-dimensional molecular curves <img src="man/figures/bayesSYNC_logo.png" align="right" height="150"/>
 
 <!-- Run for the R CMD checks, run usethis::use_github_actions() to set up the pipeline, possibly modify the .yaml file and then: -->
 
