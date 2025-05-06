@@ -424,14 +424,22 @@ frobenius_norm <- function(A, B) {
 }
 
 
+
 #' @export
 match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat,
                                   list_list_Phi_hat, list_cumulated_pve,
-                                  list_Cov_zeta_hat) {
+                                  list_Cov_zeta_hat, list_h_hat = NULL, list_var_vec = NULL) {
 
-  perm_factor <- match_factors(B, B_hat, ppi, factor_ppi, list_Zeta_hat,
+  if (!is.null(list_h_hat)) {
+    stopifnot(!is.null(list_var_vec))
+  }
+
+  N <- nrow(Zeta[[1]])
+  Q <- ncol(B_hat)
+
+  perm_factor <- match_factors(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat,
                                list_list_Phi_hat, list_cumulated_pve,
-                               list_Cov_zeta_hat)
+                               list_Cov_zeta_hat, list_h_hat)
 
   best_perm <- perm_factor$best_perm
   perm_sign_factor <- perm_factor$perm_sign_factor
@@ -456,18 +464,59 @@ match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat
   perm_list_Zeta_hat <- perm_sign$perm_list_Zeta_hat
   perm_list_list_Phi_hat <- perm_sign$perm_list_list_Phi_hat
 
+  perm_list_h_hat <- perm_factor$perm_list_h_hat
+  perm_list_h_hat_untrimmed <- perm_factor$perm_list_h_hat_untrimmed
+
+  if (!is.null(perm_list_h_hat)) {
+    perm_list_h_low <- perm_list_h_upp <- lapply(1:N, function(i) vector("list", Q_true))
+    perm_list_h_low_untrimmed <-  perm_list_h_upp_untrimmed <- lapply(1:N, function(i) vector("list", Q))
+  }
+
+  bool_rescale_loadings_and_scores <- T # so they match the simulated loadings and scores, respectively
+  if (bool_rescale_loadings_and_scores) {
+    # B is identifiable up to multiplicative sign on its columns
+    norm_col_B <- sqrt(colSums(B^2)) # this is unknown in practice.
+    norm_col_B_hat <- sqrt(colSums(perm_B_hat^2))
+
+    Q_true <- ncol(B)
+    for (q in 1:Q_true) {
+      perm_B_hat[,q] <- perm_B_hat_untrimmed[,q] <- perm_B_hat[,q] * norm_col_B[q] / norm_col_B_hat[q]
+      perm_list_Zeta_hat[[q]] <- perm_list_Zeta_hat_untrimmed[[q]] <- perm_list_Zeta_hat[[q]] * norm_col_B_hat[q] / norm_col_B[q]
+      perm_list_Cov_zeta_hat[[q]] <- lapply(perm_list_Cov_zeta_hat[[q]], function(perm_list_Cov_zeta_hat_q_i)  perm_list_Cov_zeta_hat_q_i * norm_col_B_hat[q]^2 / norm_col_B[q]^2)# check
+
+      if (!is.null(perm_list_h_hat)) {
+        for (i in 1:N) {
+          sd_i_q <- sqrt(list_var_vec[[q]][[i]])
+          perm_list_h_hat[[i]][[q]] <- perm_list_h_hat_untrimmed[[i]][[q]] <- perm_list_h_hat[[i]][[q]] * norm_col_B_hat[q] / norm_col_B[q]
+          perm_list_h_low[[i]][[q]] <- perm_list_h_low_untrimmed[[i]][[q]] <- perm_list_h_hat[[i]][[q]] + qnorm(0.025) * sd_i_q * norm_col_B_hat[q] / norm_col_B[q]
+          perm_list_h_upp[[i]][[q]] <- perm_list_h_upp_untrimmed[[i]][[q]] <- perm_list_h_hat[[i]][[q]] + qnorm(0.975) * sd_i_q * norm_col_B_hat[q] / norm_col_B[q]
+        }
+      }
+
+    }
+
+  }
+
   create_named_list(best_perm, perm_sign_factor, perm_sign_fpca, perm_factor_ppi,
                     perm_list_cumulated_pve, perm_list_Cov_zeta_hat,
                     perm_B_hat, perm_ppi, perm_list_Zeta_hat, perm_list_list_Phi_hat,
                     perm_B_hat_untrimmed, perm_ppi_untrimmed,
-                    perm_list_Zeta_hat_untrimmed, perm_list_list_Phi_hat_untrimmed)
+                    perm_list_Zeta_hat_untrimmed, perm_list_list_Phi_hat_untrimmed,
+                    perm_list_h_hat,
+                    perm_list_h_low,
+                    perm_list_h_upp,
+                    perm_list_h_hat_untrimmed,
+                    perm_list_h_low_untrimmed,
+                    perm_list_h_upp_untrimmed)
 
 }
 
 #
-match_factors <- function(B, B_hat, ppi, factor_ppi, list_Zeta_hat,
-                          list_list_Phi_hat, list_cumulated_pve, list_Cov_zeta_hat) {
+match_factors <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat,
+                          list_list_Phi_hat, list_cumulated_pve, list_Cov_zeta_hat,
+                          list_h_hat = NULL) {
 
+  N <- nrow(Zeta[[1]])
   Q_true <- ncol(B)
   Q <- ncol(B_hat)
 
@@ -503,6 +552,14 @@ match_factors <- function(B, B_hat, ppi, factor_ppi, list_Zeta_hat,
   perm_sign_factor <- rep(NA, Q_true)
   perm_list_Zeta_hat <- perm_list_list_Phi_hat <- vector("list", Q_true)
   perm_list_Zeta_hat_untrimmed <- perm_list_list_Phi_hat_untrimmed <- vector("list", Q)
+
+  if (!is.null(list_h_hat)) {
+    perm_list_h_hat <- lapply(1:N, function(i) vector("list", Q_true))
+    perm_list_h_hat_untrimmed <- lapply(1:N, function(i) vector("list", Q))
+  } else {
+    perm_list_h_hat <- perm_list_h_hat_untrimmed <- NULL
+  }
+
   for (q in 1:Q) {
 
     if (q <= Q_true) {
@@ -511,9 +568,20 @@ match_factors <- function(B, B_hat, ppi, factor_ppi, list_Zeta_hat,
 
       perm_list_Zeta_hat[[q]] <- perm_list_Zeta_hat_untrimmed[[q]] <- perm_sign_factor[q]*list_Zeta_hat[[best_perm[q]]]
       perm_list_list_Phi_hat[[q]] <- perm_list_list_Phi_hat_untrimmed[[q]] <- list_list_Phi_hat[[best_perm[q]]]
+
+      if (!is.null(list_h_hat)) {
+        for (i in 1:N) {
+          perm_list_h_hat[[i]][[q]] <- perm_list_h_hat_untrimmed[[i]][[q]] <- perm_sign_factor[q]*list_h_hat[[i]][[best_perm[q]]]
+        }
+      }
     } else {
       perm_list_Zeta_hat_untrimmed[[q]] <- list_Zeta_hat[[setdiff(1:Q, best_perm)[q-Q_true]]]
       perm_list_list_Phi_hat_untrimmed[[q]] <- list_list_Phi_hat[[setdiff(1:Q, best_perm)[q-Q_true]]]
+      if (!is.null(list_h_hat)) {
+        for (i in 1:N) {
+          perm_list_h_hat_untrimmed[[i]][[q]] <- list_h_hat[[i]][[setdiff(1:Q, best_perm)[q-Q_true]]]
+        }
+      }
     }
   }
 
@@ -528,7 +596,9 @@ match_factors <- function(B, B_hat, ppi, factor_ppi, list_Zeta_hat,
                     perm_B_hat, perm_ppi,
                     perm_list_Zeta_hat, perm_list_list_Phi_hat,
                     perm_list_Zeta_hat_untrimmed, perm_list_list_Phi_hat_untrimmed,
-                    perm_list_cumulated_pve, perm_list_Cov_zeta_hat)
+                    perm_list_cumulated_pve, perm_list_Cov_zeta_hat,
+                    perm_list_h_hat,
+                    perm_list_h_hat_untrimmed)
 }
 
 
@@ -594,3 +664,78 @@ log_one_plus_exp_ <- function(x) { # computes log(1 + exp(x)) avoiding
 log1pExp <- function(x) {
   ifelse(x > 0, x + log1p(exp(-x)), log1p(exp(x)))
 }
+
+
+get_annealing_ladder_ <- function(anneal, verbose) {
+
+  # ladder set following:
+  # Importance Tempering, Robert B. Gramacy & Richard J. Samworth, pp.9-10, arxiv v4
+
+  k_m <- 1 / anneal[2]
+  m <- anneal[3]
+
+  if(anneal[1] == 1) {
+
+    type <- "geometric"
+
+    delta_k <- k_m^(1 / (1 - m)) - 1
+
+    ladder <- (1 + delta_k)^(1 - m:1)
+
+  } else if (anneal[1] == 2) { # harmonic spacing
+
+    type <- "harmonic"
+
+    delta_k <- ( 1 / k_m - 1) / (m - 1)
+
+    ladder <- 1 / (1 + delta_k * (m:1 - 1))
+
+  } else { # linear spacing
+
+    type <- "linear"
+
+    delta_k <- (1 - k_m) / (m - 1)
+
+    ladder <- k_m + delta_k * (1:m - 1)
+  }
+
+  if (verbose != 0)
+    cat(paste0("** Annealing with ", type," spacing ** \n\n"))
+
+  ladder
+
+}
+
+# Internal function implementing sanity checks for the annealing schedule
+# specification.
+#
+check_annealing <- function(anneal, verbose) {
+
+  check_structure(anneal, "vector", "numeric", 3, null_ok = TRUE)
+
+  if (!is.null(anneal)) {
+
+    if (verbose) cat("== Checking the annealing schedule ... \n\n")
+
+    check_natural(anneal[c(1, 3)])
+    check_positive(anneal[2])
+
+    if (!(anneal[1] %in% 1:3))
+      stop(paste0("The annealing spacing scheme must be set to 1 for geometric ",
+                  "2 for harmonic or 3 for linear spacing."))
+
+    if (anneal[2] >= 2)
+      stop(paste0("Initial annealing temperature must be strictly smaller than 2.\n ",
+                  "Please decrease it."))
+
+    if (anneal[3] > 1000)
+      stop(paste0("Temperature grid size very large. This may be unnecessarily ",
+                  "computationally demanding. Please decrease it."))
+
+    if (verbose) cat("... done. == \n\n")
+
+
+  }
+
+}
+

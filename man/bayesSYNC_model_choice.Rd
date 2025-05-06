@@ -14,6 +14,7 @@ bayesSYNC_model_choice(
   list_L,
   list_Q,
   K,
+  anneal = c(1, 1.9, 100),
   list_hyper = NULL,
   n_g = 1000,
   time_g = NULL,
@@ -60,6 +61,13 @@ used (e.g., Q = 3).}
 \item{K}{Number of O'Sullivan spline functions to be used to represent the
 latent functions. If set to \code{NULL} will be set according to the
 rule of Ruppert (2002), also enforcing K >=7.}
+
+\item{anneal}{Parameters for annealing scheme. Must be a vector whose first
+entry is the type of schedule: 1 = geometric spacing (default),
+2 = harmonic spacing or 3 = linear spacing, the second entry is the initial
+temperature which must lie in the interval (0, 2) (default is 1.9), and the
+third entry is the temperature grid size (default is 100). If \code{NULL},
+no annealing is performed.}
 
 \item{list_hyper}{Hyperparameter settings constructed using the function
 \code{\link{set_hyper}}. If \code{NULL} default hyperparameters will
