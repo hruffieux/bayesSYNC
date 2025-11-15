@@ -3,8 +3,8 @@ Type: Package
 Title: BAYESian Model For High-dimensional Functional Factor Analysis Of Shared Latent dYNamiCs
 Version: 0.1.0
 Authors@R: c(
-    person("Selima", "Jaoua", 
-            email = "jaoua.selima23@gmail.com",
+    person("Salima", "Jaoua", 
+            email = "jaoua@ifi.uzh.ch",
             role = c("aut", "cre")),
     person("Daniel", "Temko",
            email = "daniel.temko@mrc-bsu.cam.ac.uk",

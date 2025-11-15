@@ -37,7 +37,7 @@ This approach allows for:
 - capturing correlations across both variables and time;
 
 - representing high-dimensional curves using a small number of FPCA
-  expansions, which reflect underlying latent factors;
+  expansions, which arise from underlying latent factors;
 
 - modelling individual variability through functional principal
   components, each characterised by smoothly varying temporal functions.
@@ -52,7 +52,7 @@ underlying diseases.
 
 - *Variable-specific loadings*: estimation of loadings for each variable
   that contributes to the FPCA expansions, providing insights into how
-  subsets of variables influence latent factors.
+  latent factors influence subsets of variables.
 
 - *Subject-specific component scores*: estimation of subject-specific
   scores for each functional principal component, allowing for
@@ -77,7 +77,7 @@ remotes::install_github("hruffieux/bayesSYNC")
 
 ### Authors and license
 
-Selima Jaoua (University of Zürich, Switzerland), Daniel Temko & Hélène
+Salima Jaoua (University of Zürich, Switzerland), Daniel Temko & Hélène
 Ruffieux (University of Cambridge, UK).
 
 This software uses the GPL v3 license. Authors and copyright are also
