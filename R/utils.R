@@ -470,6 +470,8 @@ match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat
   if (!is.null(perm_list_h_hat)) {
     perm_list_h_low <- perm_list_h_upp <- lapply(1:N, function(i) vector("list", Q_true))
     perm_list_h_low_untrimmed <-  perm_list_h_upp_untrimmed <- lapply(1:N, function(i) vector("list", Q))
+  } else {
+    perm_list_h_low <- perm_list_h_upp <- perm_list_h_low_untrimmed <-  perm_list_h_upp_untrimmed <- NULL
   }
 
   bool_rescale_loadings_and_scores <- T # so they match the simulated loadings and scores, respectively
