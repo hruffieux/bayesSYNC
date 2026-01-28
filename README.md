@@ -79,7 +79,7 @@ Then, to install the package in R, run the following command:
 
 ``` r
 if(!require(remotes)) install.packages("remotes", ref = "devel")
-remotes::install_github("hruffieux/bayesSYNC")
+remotes::install_github("hruffieux/bayesSYNC", ref = "devel")
 ```
 
 ### Authors and license
