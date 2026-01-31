@@ -428,7 +428,8 @@ frobenius_norm <- function(A, B) {
 #' @export
 match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat,
                                   list_list_Phi_hat, list_cumulated_pve,
-                                  list_Cov_zeta_hat, list_h_hat = NULL, list_var_vec = NULL) {
+                                  list_Cov_zeta_hat, list_h_hat = NULL,
+                                  list_var_vec = NULL) {
 
   if (!is.null(list_h_hat)) {
     stopifnot(!is.null(list_var_vec))
@@ -436,10 +437,11 @@ match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat
 
   N <- nrow(Zeta[[1]])
   Q <- ncol(B_hat)
+  Q_true <- ncol(B)
 
   perm_factor <- match_factors(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat,
                                list_list_Phi_hat, list_cumulated_pve,
-                               list_Cov_zeta_hat, list_h_hat)
+                               list_Cov_zeta_hat, list_h_hat, list_var_vec)
 
   best_perm <- perm_factor$best_perm
   perm_sign_factor <- perm_factor$perm_sign_factor
@@ -466,6 +468,7 @@ match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat
 
   perm_list_h_hat <- perm_factor$perm_list_h_hat
   perm_list_h_hat_untrimmed <- perm_factor$perm_list_h_hat_untrimmed
+  perm_list_var_vec <- perm_factor$perm_list_var_vec
 
   if (!is.null(perm_list_h_hat)) {
     perm_list_h_low <- perm_list_h_upp <- lapply(1:N, function(i) vector("list", Q_true))
@@ -480,7 +483,6 @@ match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat
     norm_col_B <- sqrt(colSums(B^2)) # this is unknown in practice.
     norm_col_B_hat <- sqrt(colSums(perm_B_hat^2))
 
-    Q_true <- ncol(B)
     for (q in 1:Q_true) {
       perm_B_hat[,q] <- perm_B_hat_untrimmed[,q] <- perm_B_hat[,q] * norm_col_B[q] / norm_col_B_hat[q]
       perm_list_Zeta_hat[[q]] <- perm_list_Zeta_hat_untrimmed[[q]] <- perm_list_Zeta_hat[[q]] * norm_col_B_hat[q] / norm_col_B[q]
@@ -488,10 +490,11 @@ match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat
 
       if (!is.null(perm_list_h_hat)) {
         for (i in 1:N) {
-          sd_i_q <- sqrt(list_var_vec[[q]][[i]])
           perm_list_h_hat[[i]][[q]] <- perm_list_h_hat_untrimmed[[i]][[q]] <- perm_list_h_hat[[i]][[q]] * norm_col_B_hat[q] / norm_col_B[q]
-          perm_list_h_low[[i]][[q]] <- perm_list_h_low_untrimmed[[i]][[q]] <- perm_list_h_hat[[i]][[q]] + qnorm(0.025) * sd_i_q * norm_col_B_hat[q] / norm_col_B[q]
-          perm_list_h_upp[[i]][[q]] <- perm_list_h_upp_untrimmed[[i]][[q]] <- perm_list_h_hat[[i]][[q]] + qnorm(0.975) * sd_i_q * norm_col_B_hat[q] / norm_col_B[q]
+          sd_i_q <- sqrt(perm_list_var_vec[[q]][[i]]) * norm_col_B_hat[q] / norm_col_B[q]
+
+          perm_list_h_low[[i]][[q]] <- perm_list_h_low_untrimmed[[i]][[q]] <- perm_list_h_hat[[i]][[q]] + qnorm(0.025) * sd_i_q
+          perm_list_h_upp[[i]][[q]] <- perm_list_h_upp_untrimmed[[i]][[q]] <- perm_list_h_hat[[i]][[q]] + qnorm(0.975) * sd_i_q
         }
       }
 
@@ -509,14 +512,15 @@ match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat
                     perm_list_h_upp,
                     perm_list_h_hat_untrimmed,
                     perm_list_h_low_untrimmed,
-                    perm_list_h_upp_untrimmed)
+                    perm_list_h_upp_untrimmed,
+                    perm_list_var_vec)
 
 }
 
 #
 match_factors <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat,
                           list_list_Phi_hat, list_cumulated_pve, list_Cov_zeta_hat,
-                          list_h_hat = NULL) {
+                          list_h_hat = NULL, list_var_vec = NULL) {
 
   N <- nrow(Zeta[[1]])
   Q_true <- ncol(B)
@@ -576,6 +580,7 @@ match_factors <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat,
           perm_list_h_hat[[i]][[q]] <- perm_list_h_hat_untrimmed[[i]][[q]] <- perm_sign_factor[q]*list_h_hat[[i]][[best_perm[q]]]
         }
       }
+
     } else {
       perm_list_Zeta_hat_untrimmed[[q]] <- list_Zeta_hat[[setdiff(1:Q, best_perm)[q-Q_true]]]
       perm_list_list_Phi_hat_untrimmed[[q]] <- list_list_Phi_hat[[setdiff(1:Q, best_perm)[q-Q_true]]]
@@ -593,6 +598,12 @@ match_factors <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat,
   perm_list_cumulated_pve <- c(list_cumulated_pve[best_perm], list_cumulated_pve[-best_perm])
   perm_list_Cov_zeta_hat <- c(list_Cov_zeta_hat[best_perm], list_Cov_zeta_hat[-best_perm])
 
+  if (!is.null(list_var_vec)) {
+    perm_list_var_vec <- c(list_var_vec[best_perm], list_var_vec[-best_perm])
+  } else {
+    perm_list_var_vec <- NULL
+  }
+
   create_named_list(best_perm, perm_sign_factor, perm_factor_ppi,
                     perm_B_hat_untrimmed, perm_ppi_untrimmed,
                     perm_B_hat, perm_ppi,
@@ -600,7 +611,8 @@ match_factors <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat,
                     perm_list_Zeta_hat_untrimmed, perm_list_list_Phi_hat_untrimmed,
                     perm_list_cumulated_pve, perm_list_Cov_zeta_hat,
                     perm_list_h_hat,
-                    perm_list_h_hat_untrimmed)
+                    perm_list_h_hat_untrimmed,
+                    perm_list_var_vec)
 }
 
 
