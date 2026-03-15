@@ -48,6 +48,13 @@ pathways. **bayesSYNC** can help elucidate how groups of genes work
 together over time, providing insights into the biological processes
 underlying diseases.
 
+## Warning
+
+**This is a development branch**, it is not guaranteed to be stable at
+any given time and features are subject to change. Please use the
+[stable version](https://github.com/hruffieux/bayesSYNC), unless you
+want to test and report issues.
+
 **Key features:**
 
 - *Variable-specific loadings*: estimation of loadings for each variable
@@ -72,7 +79,7 @@ Then, to install the package in R, run the following command:
 
 ``` r
 if(!require(remotes)) install.packages("remotes", ref = "devel")
-remotes::install_github("hruffieux/bayesSYNC")
+remotes::install_github("hruffieux/bayesSYNC", ref = "devel")
 ```
 
 ### Authors and license
