@@ -43,7 +43,7 @@ components ("L").}
 \item{list_L}{List containing specifications for the choice of the number of
 components 'L'. If \code{model_choice = "L"}, then must consist
 of two parameters, 'lambda_L' and 'L_max', specifying the
-Poisson(lambda_L) prior, truncated to {1, ..., L_max}, on the
+Poisson(lambda_L) prior, truncated to \{(1, ..., L_max\}, on the
 number of components L (e.g., lambda_L = 3, L_max = 10);
 if \code{model_choice = "K"}, then must consist of an integer
 named 'L' representing the (maximum) number of components to be
@@ -52,8 +52,8 @@ used (e.g., L = 10).}
 \item{list_Q}{List containing specifications for the choice of the number of
 factors 'Q'. If \code{model_choice = "Q"}, then must consist of
 two parameters, 'lambda_Q' and 'Q_max', specifying the
-Poisson(lambda_Q) prior, truncated to {2, ..., Q_max}, on the
-number of factors Q (e.g., lambda_Q = 1, L_max = 6);
+Poisson(lambda_Q) prior, truncated to \{2, ..., Q_max\}, on the
+number of factors Q (e.g., lambda_Q = 1, Q_max = 6);
 if \code{model_choice = "L"}, then must consist of an integer
 named 'Q' representing the (maximum) number of factors to be
 used (e.g., Q = 3).}
@@ -115,11 +115,4 @@ Extensions. Bayesian Analysis, 1(1), 1-27.
 
 Ruppert, D. (2002). Selecting the number of knots for penalized splines.
 Journal of computational and graphical statistics, 11(4), 735-757.
-}
-\seealso{
-\code{\link{run_mfvb_fpca}},
-          \code{\link{run_vmp_fpca}}, \code{\link{run_vmp_fpca_model_choice}},
-          \code{\link{set_hyper}}, \code{\link{flip_sign}}, \code{\link{display_fit}},
-          \code{\link{display_fit_list}}, \code{\link{display_scores}},
-          \code{\link{display_eigenfunctions}}
 }

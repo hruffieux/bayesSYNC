@@ -1,0 +1,392 @@
+---
+title: "Getting started with bayesSYNC: a simulated biomarker example"
+author: "bayesSYNC"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting started with bayesSYNC: a simulated biomarker example}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r knitr-setup, include = FALSE}
+has_splinets <- requireNamespace("Splinets", quietly = TRUE)
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.align = "center",
+  dev = "png",
+  dpi = 150,          # higher resolution than the html_vignette default
+  fig.retina = 2,     # crisp on high-density screens
+  out.width = "100%",
+  eval = has_splinets # skip the worked example if Splinets is absent
+)
+```
+
+```{r load}
+library(bayesSYNC)
+```
+
+## What this vignette shows
+
+`bayesSYNC` implements a Bayesian functional factor model for high-dimensional
+longitudinal data. It represents many observed curves (for example biomarker
+trajectories) through a small number of shared, time-varying latent factors
+that can be read as coordinated biological programmes or pathways. Each factor
+loads on a subset of biomarkers through a sparse loading matrix, and its
+temporal shape is described by functional principal component analysis (FPCA),
+which splits within-factor variation into orthogonal modes ordered by the
+variance they explain. Subject heterogeneity enters through low-dimensional
+FPCA scores. The method is described in Jaoua, Temko and Ruffieux (2026),
+*A scalable Bayesian functional factor model for high-dimensional longitudinal
+molecular data*, [arXiv:2603.20844](https://arxiv.org/abs/2603.20844); section
+numbers below refer to that paper.
+
+This tutorial runs the whole workflow on a small simulated dataset, so every
+estimate can be checked against a known truth. We use `generate_bayesSYNC_data()`
+to produce the curves, then fit the model with a deliberately over-specified
+number of factors and components and let the sparsity-inducing priors reveal how
+many are actually supported by the data. This mirrors the recommended practice
+of inferring the effective number of factors by over-specification (Section 4.3).
+
+We follow `N` patients over time `t`, measuring `p` biomarkers at a handful of
+irregular visits per patient. The model works on normalised time, so `t` must
+lie in `[0, 1]`; Section 5 shows how to rescale an arbitrary time range and map
+the results back. Here `p = 10` is a deliberately small toy so the vignette runs
+quickly, but the method scales far beyond this: it has been applied to data with
+up to 20,000 variables, matching the order of the number of human genes.
+Building this vignette fits the over-specified model and takes a few minutes.
+
+```{r splinets-note, eval = !has_splinets, echo = FALSE, results = "asis"}
+cat("> **Note.** This vignette uses `generate_bayesSYNC_data()`, which depends on",
+    "the **Splinets** package. Splinets is not installed, so the worked example",
+    "below is not evaluated. Install it with `install.packages(\"Splinets\")` to",
+    "run the tutorial.\n")
+```
+
+## 1. Simulate the data
+
+`generate_bayesSYNC_data()` takes a mean function with signature
+`mu_func(t, j, p)`, the numbers of subjects, biomarkers, factors and components,
+and a per-subject count of visits. The Beta parameters `a_om` and `b_om` control
+how many biomarkers load on each factor: the default `b_om = p` is very sparse,
+so here we use a denser setting that gives each factor a clear block of loading
+biomarkers, which keeps the illustration easy to read.
+
+```{r simulate}
+set.seed(1)
+
+N <- 50                 # patients
+p <- 10                  # biomarkers
+Q_true <- 2              # true latent factors
+L_true <- 2              # true FPCA components per factor
+
+# mean function: note the required (t, j, p) signature
+mu_func <- function(t, j, p) 1.5 * j + sin(2 * pi * t + j)
+
+n_visits <- sample(3:10, N, replace = TRUE)   # irregular number of visits per patient
+
+sim <- generate_bayesSYNC_data(
+  N = N, n = n_visits, p = p, Q = Q_true, L = L_true,
+  mu_func = mu_func,
+  a_om = 5, b_om = 2,          # dense loadings: many biomarkers load on each factor
+  vec_sd_zeta = c(1, 0.5),     # mode 1 carries more variance than mode 2
+  vec_sd_eps = 0.2,            # measurement-noise standard deviation
+  seed = 1
+)
+
+time_obs <- sim$time_obs
+Y        <- sim$Y
+
+# how many biomarkers actually load on each true factor
+colSums(sim$gamma)
+```
+
+The outputs `Y` and `time_obs` are already in the format `bayesSYNC()` expects:
+`Y[[i]][[j]]` holds patient `i`'s biomarker `j`, measured at the times in
+`time_obs[[i]]`.
+
+## 2. Fit an over-specified model
+
+We deliberately ask for more factors and modes than the truth (`Q = 5`, `L = 5`)
+and let the model prune what it does not need, following the over-specification
+strategy for learning the number of factors (Section 4.3). `bool_scale = FALSE`
+because the biomarkers already share a comparable residual scale;
+`set_hyper(d_0 = 1)` gives a neutral inclusion prior. We keep the default
+`maxit = 1000`. This is the heaviest step of the vignette because the cost grows
+with `Q` and `L`; lower them for quicker iteration.
+
+```{r fit}
+Q_fit <- 5
+L_fit <- 5
+
+fit <- bayesSYNC(time_obs = time_obs, Y = Y, L = L_fit, Q = Q_fit,
+                 bool_scale = FALSE, list_hyper = set_hyper(d_0 = 1),
+                 n_cpus = 1,
+                 tol_abs = 1e-3, tol_rel = 1e-4,   # tol_rel loosened so it converges within maxit
+                 seed = 1, verbose = FALSE)
+
+cat("iterations run:", fit$i_iter, "\n")
+```
+
+## 3. How many factors and modes are supported?
+
+Two quantities drive the selection. The factor-level posterior probability of
+inclusion `factor_ppi` gives, for each of the five fitted factors, the
+probability that at least one biomarker contributes to it. We keep the factors
+whose activity is high and treat the rest as empty. Within each retained factor,
+the cumulated percentage of variance explained across its FPCA modes tells us how
+many modes are needed; the remaining modes carry negligible variance.
+
+```{r selection}
+# (a) retain factors by their activity
+round(fit$factor_ppi, 3)
+active <- which(fit$factor_ppi > 0.5)
+cat("retained factors:", length(active), "( expected", Q_true, ")\n")
+
+# (b) within each retained factor, number of modes reaching 99% of the variance
+n_modes <- sapply(fit$list_cumulated_pve[active],
+                  function(cp) which(cp >= 99)[1])
+n_modes                                   # expected 2 for each retained factor
+```
+
+```{r fig-selection, fig.width = 8, fig.height = 3.4}
+op <- par(mfrow = c(1, 2), mar = c(4, 4.5, 3, 1))
+
+barplot(fit$factor_ppi, names.arg = paste0("F", 1:Q_fit),
+        ylim = c(0, 1), col = "skyblue2", border = NA,
+        xlab = "Fitted factor", ylab = "Factor activity (PPI)",
+        main = "Factor selection")
+abline(h = 0.5, lty = 2, col = "grey40")
+
+# cumulated variance explained within the retained factors
+cp_mat <- sapply(fit$list_cumulated_pve[active], function(cp) cp[1:L_fit])
+matplot(1:L_fit, cp_mat, type = "b", pch = 19, lty = 1,
+        col = c("darkolivegreen3", "plum3"), ylim = c(0, 100),
+        xlab = "FPCA mode", ylab = "Cumulated variance explained (%)",
+        main = "Within-factor variance")
+abline(h = 99, lty = 2, col = "grey40")
+legend("bottomright", paste("retained factor", seq_along(active)),
+       col = c("darkolivegreen3", "plum3"), lwd = 2, bty = "n", cex = 0.9)
+par(op)
+```
+
+The left panel shows two factors clearly above the activity threshold and three
+near zero, recovering `Q_true = 2`. The right panel shows the cumulated variance
+climbing to essentially 100% by the second mode, recovering `L_true = 2`.
+
+## 4. Align the estimates to the truth
+
+Latent factors are identified only up to order, sign and an overall
+loading/score scale, so before comparing estimates with the simulation we align
+them. `match_factor_and_sign()` uses the true loadings and scores to permute the
+fitted factors, keep the `Q_true` that match, flip signs and rescale. On real
+data there is no truth to align to: you would stop at Section 3 and interpret the
+retained factors directly.
+
+```{r align}
+aligned <- match_factor_and_sign(
+  B = sim$B, B_hat = fit$B_hat, ppi = fit$ppi, factor_ppi = fit$factor_ppi,
+  Zeta = sim$Zeta, list_Zeta_hat = fit$list_Zeta_hat,
+  list_list_Phi_hat = fit$list_list_Phi_hat,
+  list_cumulated_pve = fit$list_cumulated_pve,
+  list_Cov_zeta_hat = fit$list_Cov_zeta_hat
+)
+
+B_hat_al    <- aligned$perm_B_hat              # p x Q_true
+Phi_hat_al  <- aligned$perm_list_list_Phi_hat  # list of Q_true, grid x L_fit
+Zeta_hat_al <- aligned$perm_list_Zeta_hat      # list of Q_true, N x L_fit
+pve_al      <- aligned$perm_list_cumulated_pve
+
+# true and estimated loadings side by side. We rename the columns so the two
+# blocks are unambiguous: the fitted factors keep their original labels (e.g.
+# Factor_4, Factor_5) after selection, which do not match the true factor order.
+B_true <- sim$B
+rownames(B_true) <- rownames(B_hat_al) <- as.character(1:p)
+colnames(B_hat_al) <- paste0("est_F", 1:Q_true)
+colnames(B_true)   <- paste0("true_F", 1:Q_true)
+round(cbind(B_hat_al, B_true), 2)
+```
+
+## Results: recovering the shared temporal structure
+
+The five panels below compare the fit (blue) with the simulated truth (black).
+Together they show that the model recovers, from noisy and irregularly sampled
+curves, the four ingredients of the generative model: the biomarker trajectories
+themselves, which biomarkers drive each factor, the temporal shape of each
+factor, and where each subject sits along those shapes.
+
+```{r plot-setup}
+time_g  <- fit$time_g
+col_sim <- "black"
+col_est <- "skyblue2"
+
+# true noise-free curve for patient i, biomarker j, on the dense grid
+true_curve_g <- function(i, j) {
+  val <- sim$mu_g[[j]]
+  for (q in 1:Q_true) {
+    val <- val + sim$B[j, q] * as.vector(sim$Phi_g[[q]] %*% sim$Zeta[[q]][i, ])
+  }
+  val
+}
+```
+
+### Reconstructed biomarker trajectories
+
+Each panel is one patient and one biomarker. The blue curve is the fitted
+trajectory with its 95% pointwise credible band; the grey dots are the actual
+(noisy) observations; the black curve is the noise-free truth. The band should
+cover the truth and the fit should track it even where visits are sparse, because
+the model borrows strength across subjects and biomarkers.
+
+```{r fig-trajectories, fig.width = 10, fig.height = 2.5}
+set.seed(2)
+pairs_i <- sample(1:N, 5)
+pairs_j <- sample(1:p, 5)
+op <- par(mfrow = c(1, 5), mar = c(4, 4, 3, 1), cex.main = 1)
+for (k in 1:5) {
+  i <- pairs_i[k]; j <- pairs_j[k]
+  yh <- fit$list_Y_hat[[i]][[j]]; yl <- fit$list_Y_low[[i]][[j]]; yu <- fit$list_Y_upp[[i]][[j]]
+  yt <- true_curve_g(i, j)
+  plot(time_g, yh, type = "n", ylim = range(c(yl, yu, Y[[i]][[j]], yt)),
+       xlab = "Time", ylab = "Biomarker value",
+       main = sprintf("Subject %d, biomarker %d", i, j))
+  polygon(c(time_g, rev(time_g)), c(yl, rev(yu)), col = adjustcolor(col_est, 0.2), border = NA)
+  lines(time_g, yt, lwd = 2, col = col_sim)
+  lines(time_g, yh, lwd = 2, col = col_est)
+  points(time_obs[[i]], Y[[i]][[j]], pch = 19, col = "grey45", cex = 0.8)
+  if (k == 1) legend("topleft", c("simulated", "estimated", "observed"),
+                     col = c(col_sim, col_est, "grey45"), lwd = c(2, 2, NA),
+                     pch = c(NA, NA, 19), bty = "n", cex = 0.85)
+}
+par(op)
+```
+
+### Loading matrix: which biomarkers drive each factor
+
+The loading matrix is the map from biomarkers (rows) to factors (columns). A
+strongly coloured cell means the biomarker contributes to that factor, red for a
+positive loading and blue for a negative one; near-white rows are biomarkers the
+factor ignores. This sparse structure is what makes each factor interpretable as
+a pathway acting on a specific subset of biomarkers. The left panel is the truth;
+the right panel is the estimate, annotated with the sign of the true loading so
+position and sign can be checked at a glance.
+
+```{r fig-loadings, fig.width = 7, fig.height = 5.5}
+plot_loading_matrix <- function(M, main = "", sign_annot = NULL) {
+  M[!is.finite(M)] <- 0
+  pn <- nrow(M); qn <- ncol(M)
+  m <- max(abs(M)); if (!is.finite(m) || m == 0) m <- 1
+  pal <- colorRampPalette(c("#4a90c2", "white", "#e05a4d"))(101)
+  v2c <- function(v) { if (!is.finite(v)) v <- 0; pal[round((v + m) / (2 * m) * 100) + 1] }
+  plot(NA, xlim = c(0.5, qn + 0.5), ylim = c(0.5, pn + 0.5),
+       xlab = "Factor", ylab = "Biomarker", axes = FALSE, main = main)
+  for (j in 1:pn) { yv <- pn - j + 1; for (q in 1:qn) {
+    rect(q - 0.5, yv - 0.5, q + 0.5, yv + 0.5, col = v2c(M[j, q]), border = "grey80")
+    if (!is.null(sign_annot) && sign_annot[j, q] != "") text(q, yv, sign_annot[j, q], cex = 0.9)
+  }}
+  axis(1, at = 1:qn, labels = 1:qn, tick = FALSE, line = -0.5)
+  axis(2, at = pn:1, labels = 1:pn, las = 1, tick = FALSE, line = -0.5, cex.axis = 0.8)
+}
+true_sign <- matrix("", p, Q_true); true_sign[B_true > 0] <- "+"; true_sign[B_true < 0] <- "-"
+op <- par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+plot_loading_matrix(B_true,   main = "Simulated loadings")
+plot_loading_matrix(B_hat_al, main = "Estimated loadings", sign_annot = true_sign)
+par(op)
+```
+
+### Eigenfunctions: the temporal shape of each factor
+
+Within a factor, FPCA decomposes the subject curves into orthogonal modes
+ordered by the variance they explain. Each panel is one mode of one factor: the
+black curve is the true eigenfunction, the blue curve the estimate, and the title
+gives the share of within-factor variance carried by that mode. Mode 1 captures
+the dominant temporal pattern, mode 2 a smaller higher-order fluctuation.
+
+```{r fig-eigen, fig.width = 8, fig.height = 6.5}
+per_comp_pve <- function(cp) c(cp[1], diff(cp))
+op <- par(mfrow = c(Q_true, L_true), mar = c(4, 4.2, 3, 1), cex.main = 0.9)
+for (q in 1:Q_true) {
+  pv <- per_comp_pve(pve_al[[q]])
+  for (l in 1:L_true) {
+    yl <- range(c(sim$Phi_g[[q]][, l], Phi_hat_al[[q]][, l]))
+    plot(time_g, sim$Phi_g[[q]][, l], type = "l", lwd = 2, col = col_sim, ylim = yl,
+         xlab = "Time", ylab = "Eigenfunction value",
+         main = sprintf("Factor %d, mode %d (%.0f%% of variance)", q, l, pv[l]))
+    lines(time_g, Phi_hat_al[[q]][, l], lwd = 2, col = col_est)
+    abline(h = 0, lty = 3, col = "grey60")
+    if (q == 1 && l == 1) legend("topright", c("simulated", "estimated"),
+                                 col = c(col_sim, col_est), lwd = 2, bty = "n", cex = 0.85)
+  }
+}
+par(op)
+```
+
+### Scores: where each subject sits along each mode
+
+The score places each subject on a given factor and mode: it is the weight of
+that subject's curve on the corresponding eigenfunction, and it is where patient
+heterogeneity is summarised. Each panel plots the estimated score against the
+true score across subjects, for one factor and mode. A tight straight line means
+the ordering and spread of subjects are recovered. The axes need not share a
+scale, since loadings and scores are identified only up to a common factor, so we
+report the correlation and a best-fit line.
+
+```{r fig-scores, fig.width = 6.5, fig.height = 6.5}
+op <- par(mfrow = c(Q_true, L_true), mar = c(4, 4.2, 3, 1), cex.main = 0.9)
+for (q in 1:Q_true) for (l in 1:L_true) {
+  xs <- sim$Zeta[[q]][, l]; ys <- Zeta_hat_al[[q]][, l]
+  ok <- sd(xs) > 0 && sd(ys) > 0
+  plot(xs, ys, pch = 19, col = "grey35", cex = 0.7,
+       xlab = "Simulated score", ylab = "Estimated score",
+       main = sprintf("Factor %d, mode %d (r = %s)", q, l,
+                      ifelse(ok, sprintf("%.2f", cor(xs, ys)), "NA")))
+  if (ok) abline(lm(ys ~ xs), col = col_est, lwd = 1.5)
+}
+par(op)
+```
+
+### Mean functions
+
+Separately from the factors, each biomarker has its own population mean
+trajectory. Each panel overlays the true mean (black) and the estimated mean
+(blue) for one biomarker. These should match closely, since the mean is the
+easiest part of the model to estimate.
+
+```{r fig-means, fig.width = 9, fig.height = 4}
+op <- par(mfrow = c(2, 5), mar = c(3.6, 3.6, 2.6, 1), mgp = c(2.1, 0.7, 0), cex.main = 1)
+for (j in 1:p) {
+  yl <- range(c(sim$mu_g[[j]], fit$list_mu_hat[[j]]))
+  plot(time_g, sim$mu_g[[j]], type = "l", lwd = 2, col = col_sim, ylim = yl,
+       xlab = "Time", ylab = "Mean value", main = sprintf("Biomarker %d", j))
+  lines(time_g, fit$list_mu_hat[[j]], lwd = 2, col = col_est)
+}
+par(op)
+```
+
+## 5. Moving to real data
+
+Replace Section 1 with your own `time_obs` and `Y` in the nested-list format.
+The model works on normalised time, so first rescale every observation time to
+`[0, 1]`, for example `t_scaled = (t - t_min) / (t_max - t_min)` with a common
+`t_min` and `t_max` across all subjects. The returned grid `fit$time_g` and all
+smooth estimates then live on `[0, 1]`, and you map them back to the original
+scale with `t = t_min + t_scaled * (t_max - t_min)`. Keep the over-specified fit
+of Section 2, and use Section 3 to decide how many factors and modes to retain.
+Then interpret `fit$B_hat`, `fit$ppi` and `fit$factor_ppi` directly and skip the
+truth alignment of Section 4.
+
+The method scales to tens of thousands of biomarkers. For large `p`, raise
+`n_cpus` to use the built-in parallelism. For a small toy like this one,
+parallelism will not necessarily help and can even slow things down, because the
+per-worker communication overhead outweighs the work each worker does.
+
+If a factor comes out empty, the cause is usually weak evidence relative to the
+sparsity prior. In order of impact: give each factor enough loading biomarkers
+(in the simulation, raise `a_om` relative to `b_om`), increase `N`, use
+`set_hyper(d_0 = 1)`, and set `bool_scale` correctly for your data.
+
+## Reference
+
+Jaoua, S., Temko, D. and Ruffieux, H. (2026). *A scalable Bayesian functional
+factor model for high-dimensional longitudinal molecular data.*
+[arXiv:2603.20844](https://arxiv.org/abs/2603.20844).

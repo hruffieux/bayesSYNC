@@ -425,10 +425,136 @@ frobenius_norm <- function(A, B) {
 
 
 
+
+match_factors <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat,
+                          list_list_Phi_hat, list_cumulated_pve, list_Cov_zeta_hat,
+                          list_h_hat = NULL, list_var_vec = NULL) {
+  N <- nrow(Zeta[[1]])
+  Q_true <- ncol(B)
+  Q <- ncol(B_hat)
+  if (Q_true > Q) {
+    stop("The number of estimated factors, Q, must be larger than the number of true factors.")
+  } else if (Q_true < Q) {
+    warning("Dropping superfluous factors based on the true loadings.")
+  }
+  true_pat <- 1*(abs(B) > 0)
+  # Generate all possible permutations of column indices
+  perms <- gtools::permutations(Q, Q_true)
+  # Initialize minimum distance and best permutation
+  min_distance <- Inf
+  best_perm <- NULL
+  # Iterate over all permutations to find the best one
+  for (i in 1:nrow(perms)) {
+    permuted_ppi <- ppi[, perms[i, ], drop = F]
+    distance <- frobenius_norm(true_pat, permuted_ppi)
+    if (distance < min_distance) {
+      min_distance <- distance
+      best_perm <- perms[i, ]
+    }
+  }
+  # Reorder B with the best permutation found
+  perm_ppi <- ppi[, best_perm, drop = F]
+  perm_B_hat <- B_hat[, best_perm, drop = F]
+  perm_sign_factor <- rep(NA, Q_true)
+  perm_list_Zeta_hat <- perm_list_list_Phi_hat <- vector("list", Q_true)
+  perm_list_Zeta_hat_untrimmed <- perm_list_list_Phi_hat_untrimmed <- vector("list", Q)
+  if (!is.null(list_h_hat)) {
+    perm_list_h_hat <- lapply(1:N, function(i) vector("list", Q_true))
+    perm_list_h_hat_untrimmed <- lapply(1:N, function(i) vector("list", Q))
+  } else {
+    perm_list_h_hat <- perm_list_h_hat_untrimmed <- NULL
+  }
+  for (q in 1:Q) {
+    if (q <= Q_true) {
+      perm_sign_factor[q] <- ifelse(frobenius_norm(B[,q], perm_B_hat[,q]) > frobenius_norm(B[,q], -perm_B_hat[,q]), -1, 1)
+      perm_B_hat[,q] <- perm_sign_factor[q]*perm_B_hat[,q]
+      perm_list_Zeta_hat[[q]] <- perm_list_Zeta_hat_untrimmed[[q]] <- perm_sign_factor[q]*list_Zeta_hat[[best_perm[q]]]
+      perm_list_list_Phi_hat[[q]] <- perm_list_list_Phi_hat_untrimmed[[q]] <- list_list_Phi_hat[[best_perm[q]]]
+      if (!is.null(list_h_hat)) {
+        for (i in 1:N) {
+          perm_list_h_hat[[i]][[q]] <- perm_list_h_hat_untrimmed[[i]][[q]] <- perm_sign_factor[q]*list_h_hat[[i]][[best_perm[q]]]
+        }
+      }
+    } else {
+      perm_list_Zeta_hat_untrimmed[[q]] <- list_Zeta_hat[[setdiff(1:Q, best_perm)[q-Q_true]]]
+      perm_list_list_Phi_hat_untrimmed[[q]] <- list_list_Phi_hat[[setdiff(1:Q, best_perm)[q-Q_true]]]
+      if (!is.null(list_h_hat)) {
+        for (i in 1:N) {
+          perm_list_h_hat_untrimmed[[i]][[q]] <- list_h_hat[[i]][[setdiff(1:Q, best_perm)[q-Q_true]]]
+        }
+      }
+    }
+  }
+  perm_ppi_untrimmed <- cbind(perm_ppi, ppi[, -best_perm, drop = F])
+  perm_B_hat_untrimmed <- cbind(perm_B_hat, B_hat[, -best_perm, drop = F])
+  perm_factor_ppi <- c(factor_ppi[best_perm], factor_ppi[-best_perm]) # posterior probabilities of inclusion of the permuted factors
+  perm_list_cumulated_pve <- c(list_cumulated_pve[best_perm], list_cumulated_pve[-best_perm])
+  perm_list_Cov_zeta_hat <- c(list_Cov_zeta_hat[best_perm], list_Cov_zeta_hat[-best_perm])
+
+  # Reorder the per-subject variance list the same way (needed by
+  # match_factor_and_sign when list_h_hat is supplied).
+  if (!is.null(list_var_vec)) {
+    perm_list_var_vec <- c(list_var_vec[best_perm], list_var_vec[-best_perm])
+  } else {
+    perm_list_var_vec <- NULL
+  }
+
+  create_named_list(best_perm, perm_sign_factor, perm_factor_ppi,
+                    perm_B_hat_untrimmed, perm_ppi_untrimmed,
+                    perm_B_hat, perm_ppi,
+                    perm_list_Zeta_hat, perm_list_list_Phi_hat,
+                    perm_list_Zeta_hat_untrimmed, perm_list_list_Phi_hat_untrimmed,
+                    perm_list_cumulated_pve, perm_list_Cov_zeta_hat,
+                    perm_list_h_hat,
+                    perm_list_h_hat_untrimmed,
+                    perm_list_var_vec)
+}
+
+
+#' Align estimated factors to a known (simulated) truth
+#'
+#' Permutes the estimated factors, flips the sign of each component and rescales
+#' loadings and scores so that the \code{\link{bayesSYNC}} estimates line up with
+#' a known ground truth. Latent factors are identifiable only up to their order,
+#' the sign of each component and an overall loading/score scale, so this
+#' alignment is needed before estimates and truth can be compared. It is only
+#' usable in simulations, where the true loadings and scores are available (for
+#' example those returned by \code{\link{generate_bayesSYNC_data}}).
+#'
+#' @param B True loading matrix of size \code{p x Q_true}.
+#' @param B_hat Estimated loading matrix of size \code{p x Q} as returned by
+#'   \code{\link{bayesSYNC}}. \code{Q} must be at least \code{Q_true}.
+#' @param ppi Estimated posterior probabilities of inclusion, size \code{p x Q}.
+#' @param factor_ppi Estimated factor-level activity, length \code{Q}.
+#' @param Zeta True scores, a list of length \code{Q_true} of \code{N x L_true}
+#'   matrices.
+#' @param list_Zeta_hat Estimated scores, a list of length \code{Q} of
+#'   \code{N x L} matrices.
+#' @param list_list_Phi_hat Estimated eigenfunctions, a list of length \code{Q}
+#'   of matrices holding the eigenfunctions in their columns.
+#' @param list_cumulated_pve Estimated cumulated percentage of variance
+#'   explained, a list of length \code{Q}.
+#' @param list_Cov_zeta_hat Estimated score covariances, a list of length
+#'   \code{Q}.
+#' @param list_h_hat Optional estimated latent factor curves. If supplied,
+#'   \code{list_var_vec} must be supplied as well.
+#' @param list_var_vec Optional list of per-subject variances used to rescale the
+#'   credible bands of \code{list_h_hat}.
+#'
+#' @return A named list of the permuted, sign-matched and rescaled estimates,
+#'   including \code{perm_B_hat}, \code{perm_ppi}, \code{perm_factor_ppi},
+#'   \code{perm_list_Zeta_hat}, \code{perm_list_list_Phi_hat},
+#'   \code{perm_list_cumulated_pve}, \code{perm_list_Cov_zeta_hat} and the
+#'   corresponding untrimmed versions.
+#'
+#' @seealso \code{\link{bayesSYNC}}, \code{\link{generate_bayesSYNC_data}}
+#'
 #' @export
+#'
 match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat,
                                   list_list_Phi_hat, list_cumulated_pve,
-                                  list_Cov_zeta_hat, list_h_hat = NULL, list_var_vec = NULL) {
+                                  list_Cov_zeta_hat, list_h_hat = NULL,
+                                  list_var_vec = NULL) {
 
   if (!is.null(list_h_hat)) {
     stopifnot(!is.null(list_var_vec))
@@ -436,10 +562,11 @@ match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat
 
   N <- nrow(Zeta[[1]])
   Q <- ncol(B_hat)
+  Q_true <- ncol(B)
 
   perm_factor <- match_factors(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat,
                                list_list_Phi_hat, list_cumulated_pve,
-                               list_Cov_zeta_hat, list_h_hat)
+                               list_Cov_zeta_hat, list_h_hat, list_var_vec)
 
   best_perm <- perm_factor$best_perm
   perm_sign_factor <- perm_factor$perm_sign_factor
@@ -459,17 +586,22 @@ match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat
 
   perm_sign <- match_sign_components(Zeta, perm_list_Zeta_hat, perm_list_list_Phi_hat)
 
-  perm_sign_fpca <- perm_factor$perm_sign_fpca
+  # NOTE: perm_sign_fpca is produced by match_sign_components (perm_sign), not by
+  # match_factors. Reading it from perm_sign keeps the returned value meaningful.
+  perm_sign_fpca <- perm_sign$perm_sign_fpca
 
   perm_list_Zeta_hat <- perm_sign$perm_list_Zeta_hat
   perm_list_list_Phi_hat <- perm_sign$perm_list_list_Phi_hat
 
   perm_list_h_hat <- perm_factor$perm_list_h_hat
   perm_list_h_hat_untrimmed <- perm_factor$perm_list_h_hat_untrimmed
+  perm_list_var_vec <- perm_factor$perm_list_var_vec
 
   if (!is.null(perm_list_h_hat)) {
     perm_list_h_low <- perm_list_h_upp <- lapply(1:N, function(i) vector("list", Q_true))
     perm_list_h_low_untrimmed <-  perm_list_h_upp_untrimmed <- lapply(1:N, function(i) vector("list", Q))
+  } else {
+    perm_list_h_low <- perm_list_h_upp <- perm_list_h_low_untrimmed <-  perm_list_h_upp_untrimmed <- NULL
   }
 
   bool_rescale_loadings_and_scores <- T # so they match the simulated loadings and scores, respectively
@@ -478,18 +610,34 @@ match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat
     norm_col_B <- sqrt(colSums(B^2)) # this is unknown in practice.
     norm_col_B_hat <- sqrt(colSums(perm_B_hat^2))
 
-    Q_true <- ncol(B)
+    eps_norm <- .Machine$double.eps^0.5 # below this a factor is treated as inactive
+
     for (q in 1:Q_true) {
+
+      # Guard against an undetected factor: if the estimated loadings for factor
+      # q are essentially zero, rescaling divides by zero (0 * Inf = NaN). Leave
+      # the (near-zero) estimates unchanged for this factor and warn.
+      if (norm_col_B_hat[q] < eps_norm) {
+        warning(paste0("Factor ", q, " has near-zero estimated loadings; it is ",
+                       "treated as inactive and left unrescaled (factor not ",
+                       "detected). Consider increasing N, the number of loading ",
+                       "variables per factor, or the signal."))
+        perm_B_hat_untrimmed[, q] <- perm_B_hat[, q]
+        perm_list_Zeta_hat_untrimmed[[q]] <- perm_list_Zeta_hat[[q]]
+        next
+      }
+
       perm_B_hat[,q] <- perm_B_hat_untrimmed[,q] <- perm_B_hat[,q] * norm_col_B[q] / norm_col_B_hat[q]
       perm_list_Zeta_hat[[q]] <- perm_list_Zeta_hat_untrimmed[[q]] <- perm_list_Zeta_hat[[q]] * norm_col_B_hat[q] / norm_col_B[q]
       perm_list_Cov_zeta_hat[[q]] <- lapply(perm_list_Cov_zeta_hat[[q]], function(perm_list_Cov_zeta_hat_q_i)  perm_list_Cov_zeta_hat_q_i * norm_col_B_hat[q]^2 / norm_col_B[q]^2)# check
 
       if (!is.null(perm_list_h_hat)) {
         for (i in 1:N) {
-          sd_i_q <- sqrt(list_var_vec[[q]][[i]])
           perm_list_h_hat[[i]][[q]] <- perm_list_h_hat_untrimmed[[i]][[q]] <- perm_list_h_hat[[i]][[q]] * norm_col_B_hat[q] / norm_col_B[q]
-          perm_list_h_low[[i]][[q]] <- perm_list_h_low_untrimmed[[i]][[q]] <- perm_list_h_hat[[i]][[q]] + qnorm(0.025) * sd_i_q * norm_col_B_hat[q] / norm_col_B[q]
-          perm_list_h_upp[[i]][[q]] <- perm_list_h_upp_untrimmed[[i]][[q]] <- perm_list_h_hat[[i]][[q]] + qnorm(0.975) * sd_i_q * norm_col_B_hat[q] / norm_col_B[q]
+          sd_i_q <- sqrt(perm_list_var_vec[[q]][[i]]) * norm_col_B_hat[q] / norm_col_B[q]
+
+          perm_list_h_low[[i]][[q]] <- perm_list_h_low_untrimmed[[i]][[q]] <- perm_list_h_hat[[i]][[q]] + qnorm(0.025) * sd_i_q
+          perm_list_h_upp[[i]][[q]] <- perm_list_h_upp_untrimmed[[i]][[q]] <- perm_list_h_hat[[i]][[q]] + qnorm(0.975) * sd_i_q
         }
       }
 
@@ -507,98 +655,9 @@ match_factor_and_sign <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat
                     perm_list_h_upp,
                     perm_list_h_hat_untrimmed,
                     perm_list_h_low_untrimmed,
-                    perm_list_h_upp_untrimmed)
+                    perm_list_h_upp_untrimmed,
+                    perm_list_var_vec)
 
-}
-
-#
-match_factors <- function(B, B_hat, ppi, factor_ppi, Zeta, list_Zeta_hat,
-                          list_list_Phi_hat, list_cumulated_pve, list_Cov_zeta_hat,
-                          list_h_hat = NULL) {
-
-  N <- nrow(Zeta[[1]])
-  Q_true <- ncol(B)
-  Q <- ncol(B_hat)
-
-  if (Q_true > Q) {
-    stop("The number of estimated factors, Q, must be larger than the number of true factors.")
-  } else if (Q_true < Q) {
-    warning("Dropping superfluous factors based on the true loadings.")
-  }
-  true_pat <- 1*(abs(B) > 0)
-
-  # Generate all possible permutations of column indices
-  perms <- gtools::permutations(Q, Q_true)
-
-  # Initialize minimum distance and best permutation
-  min_distance <- Inf
-  best_perm <- NULL
-
-  # Iterate over all permutations to find the best one
-  for (i in 1:nrow(perms)) {
-    permuted_ppi <- ppi[, perms[i, ], drop = F]
-    distance <- frobenius_norm(true_pat, permuted_ppi)
-
-    if (distance < min_distance) {
-      min_distance <- distance
-      best_perm <- perms[i, ]
-    }
-  }
-
-  # Reorder B with the best permutation found
-  perm_ppi <- ppi[, best_perm, drop = F]
-  perm_B_hat <- B_hat[, best_perm, drop = F]
-
-  perm_sign_factor <- rep(NA, Q_true)
-  perm_list_Zeta_hat <- perm_list_list_Phi_hat <- vector("list", Q_true)
-  perm_list_Zeta_hat_untrimmed <- perm_list_list_Phi_hat_untrimmed <- vector("list", Q)
-
-  if (!is.null(list_h_hat)) {
-    perm_list_h_hat <- lapply(1:N, function(i) vector("list", Q_true))
-    perm_list_h_hat_untrimmed <- lapply(1:N, function(i) vector("list", Q))
-  } else {
-    perm_list_h_hat <- perm_list_h_hat_untrimmed <- NULL
-  }
-
-  for (q in 1:Q) {
-
-    if (q <= Q_true) {
-      perm_sign_factor[q] <- ifelse(frobenius_norm(B[,q], perm_B_hat[,q]) > frobenius_norm(B[,q], -perm_B_hat[,q]), -1, 1)
-      perm_B_hat[,q] <- perm_sign_factor[q]*perm_B_hat[,q]
-
-      perm_list_Zeta_hat[[q]] <- perm_list_Zeta_hat_untrimmed[[q]] <- perm_sign_factor[q]*list_Zeta_hat[[best_perm[q]]]
-      perm_list_list_Phi_hat[[q]] <- perm_list_list_Phi_hat_untrimmed[[q]] <- list_list_Phi_hat[[best_perm[q]]]
-
-      if (!is.null(list_h_hat)) {
-        for (i in 1:N) {
-          perm_list_h_hat[[i]][[q]] <- perm_list_h_hat_untrimmed[[i]][[q]] <- perm_sign_factor[q]*list_h_hat[[i]][[best_perm[q]]]
-        }
-      }
-    } else {
-      perm_list_Zeta_hat_untrimmed[[q]] <- list_Zeta_hat[[setdiff(1:Q, best_perm)[q-Q_true]]]
-      perm_list_list_Phi_hat_untrimmed[[q]] <- list_list_Phi_hat[[setdiff(1:Q, best_perm)[q-Q_true]]]
-      if (!is.null(list_h_hat)) {
-        for (i in 1:N) {
-          perm_list_h_hat_untrimmed[[i]][[q]] <- list_h_hat[[i]][[setdiff(1:Q, best_perm)[q-Q_true]]]
-        }
-      }
-    }
-  }
-
-  perm_ppi_untrimmed <- cbind(perm_ppi, ppi[, -best_perm, drop = F])
-  perm_B_hat_untrimmed <- cbind(perm_B_hat, B_hat[, -best_perm, drop = F])
-  perm_factor_ppi <- c(factor_ppi[best_perm], factor_ppi[-best_perm]) # posterior probabilities of inclusion of the permuted factors
-  perm_list_cumulated_pve <- c(list_cumulated_pve[best_perm], list_cumulated_pve[-best_perm])
-  perm_list_Cov_zeta_hat <- c(list_Cov_zeta_hat[best_perm], list_Cov_zeta_hat[-best_perm])
-
-  create_named_list(best_perm, perm_sign_factor, perm_factor_ppi,
-                    perm_B_hat_untrimmed, perm_ppi_untrimmed,
-                    perm_B_hat, perm_ppi,
-                    perm_list_Zeta_hat, perm_list_list_Phi_hat,
-                    perm_list_Zeta_hat_untrimmed, perm_list_list_Phi_hat_untrimmed,
-                    perm_list_cumulated_pve, perm_list_Cov_zeta_hat,
-                    perm_list_h_hat,
-                    perm_list_h_hat_untrimmed)
 }
 
 

@@ -30,4 +30,10 @@ Imports:
     stats,
     splines,
     parallel
-RoxygenNote: 7.3.2
+Suggests:
+    knitr, 
+    rmarkdown,
+    Splinets
+VignetteBuilder: 
+    knitr
+RoxygenNote: 7.3.3
