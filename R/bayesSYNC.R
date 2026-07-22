@@ -267,6 +267,56 @@ bayesSYNC <- function(time_obs, Y, L, Q, K = NULL,
   stopifnot(is.list(Y))
   stopifnot(isTRUE(all.equal(length(time_obs), length(Y))))
 
+  # No missing values are allowed: bayesSYNC cannot run with NAs. unlist()
+  # flattens the nested lists so this also catches NAs in the inner per-variable
+  # vectors. The messages explain that the observation grid does not need to be
+  # regular or shared, and that NAs only genuinely require imputation in one
+  # specific case (see below).
+  if (anyNA(unlist(time_obs, use.names = FALSE))) {
+    stop(paste0("time_obs contains missing values (NA). Please remove them ",
+                "before calling bayesSYNC. Note that the observation times do ",
+                "not need to be regular, nor shared across individuals: simply ",
+                "drop each missing time (and its measurements in Y) for the ",
+                "subject concerned."))
+  }
+  if (anyNA(unlist(Y, use.names = FALSE))) {
+    stop(paste0("Y contains missing values (NA); bayesSYNC cannot run with ",
+                "missing data. The observation grid does not need to be regular, ",
+                "nor shared across variables or across individuals, so in most ",
+                "cases a missing value simply means a time point should be ",
+                "dropped: remove that time point from time_obs[[i]] and the ",
+                "corresponding entry of every Y[[i]][[j]] for that subject. ",
+                "The only case that genuinely requires a choice is when a value ",
+                "is missing for just a subset of variables at a given subject ",
+                "and time point (the variables of a subject share one time ",
+                "grid, so the whole time point cannot simply be kept): there, ",
+                "either drop that time point, losing the variables that were ",
+                "observed, or impute the missing values."))
+  }
+
+  # Each subject must have the same variables, and every variable must have
+  # exactly one measurement per observation time, i.e. length(Y[[i]][[j]]) must
+  # equal length(time_obs[[i]]). This typically fails after time points have
+  # been removed (e.g. to handle missing data) without updating time_obs.
+  p_check <- length(Y[[1]])
+  for (i in seq_along(Y)) {
+    if (length(Y[[i]]) != p_check) {
+      stop(paste0("Y[[", i, "]] has ", length(Y[[i]]), " variable(s) but Y[[1]] ",
+                  "has ", p_check, ". Every subject must have the same variables."))
+    }
+    n_i <- length(time_obs[[i]])
+    len_ij <- vapply(Y[[i]], length, integer(1))
+    if (any(len_ij != n_i)) {
+      bad <- which(len_ij != n_i)
+      stop(paste0("Length mismatch for subject ", i, ": time_obs[[", i, "]] has ",
+                  n_i, " time point(s) but variable(s) ",
+                  paste(bad, collapse = ", "), " of Y[[", i, "]] have ",
+                  paste(len_ij[bad], collapse = ", "),
+                  " measurement(s). Each variable must have exactly one ",
+                  "measurement per observation time."))
+    }
+  }
+
   check_structure(L, "vector", "numeric", 1)
   check_natural(L)
 
