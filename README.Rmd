@@ -79,8 +79,8 @@ providing insights into the biological processes underlying diseases.
 Then, to install the package in R, run the following command:
 
 ``` r
-if(!require(remotes)) install.packages("remotes", ref = "devel")
-remotes::install_github("hruffieux/bayesSYNC", ref = "devel")
+if(!require(remotes)) install.packages("remotes")
+remotes::install_github("hruffieux/bayesSYNC")
 ```
 
 ### Authors and license
