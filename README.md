@@ -48,13 +48,6 @@ pathways. **bayesSYNC** can help elucidate how groups of genes work
 together over time, providing insights into the biological processes
 underlying diseases.
 
-## Warning
-
-**This is a development branch**, it is not guaranteed to be stable at
-any given time and features are subject to change. Please use the
-[stable version](https://github.com/hruffieux/bayesSYNC), unless you
-want to test and report issues.
-
 **Key features:**
 
 - *Variable-specific loadings*: estimation of loadings for each variable
