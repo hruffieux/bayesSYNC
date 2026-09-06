@@ -54,7 +54,7 @@
 #'        within-individual means are first computed, their mean and sd across
 #'        individuals are obtained, and used to scale the measurements. Default is TRUE.
 #' @param bool_var_spec_prob Whether to use variable- (and factor-) specific
-#'        spike-and-slab probabilities. Default is TRUE.
+#'        spike-and-slab probabilities. Default is FALSE.
 #'
 #' @return An object containing the resulting MFVB estimates.
 #'
@@ -76,7 +76,7 @@ bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
                                    tol_abs = 1e-3,
                                    tol_rel = 1e-5, maxit = 1000,
                                    n_cpus = 1, verbose = TRUE, seed = NULL,
-                                   bool_scale = TRUE, bool_var_spec_prob = TRUE) {
+                                   bool_scale = TRUE, bool_var_spec_prob = FALSE) {
 
   check_structure(model_choice, "vector", "string", 1)
   stopifnot(model_choice %in% c("Q", "L"))
@@ -235,7 +235,7 @@ bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
 #'        within-individual means are first computed, their mean and sd across
 #'        individuals are obtained, and used to scale the measurements. Default is TRUE.
 #' @param bool_var_spec_prob Whether to use variable- (and factor-) specific
-#'        spike-and-slab probabilities. Default is TRUE.
+#'        spike-and-slab probabilities. Default is FALSE.
 #' @param show_factor_ppi_progress Whether to show a plot of the factor posterior
 #'        probabilities of inclusion as the algorithm progresses. Default is FALSE.
 #'
