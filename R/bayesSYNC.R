@@ -56,7 +56,20 @@
 #' @param bool_var_spec_prob Whether to use variable- (and factor-) specific
 #'        spike-and-slab probabilities. Default is FALSE.
 #'
-#' @return An object containing the resulting MFVB estimates.
+#' @return An object containing the resulting MFVB estimates: the output of
+#'   \code{\link{bayesSYNC}} for the selected number of factors (or
+#'   components), with all the elements described there, and the two elements
+#'   below. The selected model is the one maximising
+#'   \code{vec_log_unnorm_p_model_given_y}.
+#' \describe{
+#'   \item{vec_elbo}{Named vector with the ELBO of the fit for each candidate
+#'         value of \code{Q} (or \code{L}).}
+#'   \item{vec_log_unnorm_p_model_given_y}{Named vector with, for each
+#'         candidate value, the ELBO plus the log of the Poisson prior
+#'         probability of that value. The ELBO stands in for the log marginal
+#'         likelihood, so this approximates the log posterior probability of
+#'         the candidate model up to an additive constant.}
+#' }
 #'
 #'
 #' @references
@@ -67,7 +80,7 @@
 #' Ruppert, D. (2002). Selecting the number of knots for penalized splines.
 #' Journal of computational and graphical statistics, 11(4), 735-757.
 #'
-#' @export
+#' @noRd
 #'
 bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
                                    anneal = c(1, 1.9, 100),
@@ -239,7 +252,94 @@ bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
 #' @param show_factor_ppi_progress Whether to show a plot of the factor posterior
 #'        probabilities of inclusion as the algorithm progresses. Default is FALSE.
 #'
-#' @return An object containing the resulting estimates.
+#' @return An object containing the resulting estimates, as a list with the
+#'   elements below. Posterior quantities are those of the mean-field
+#'   variational approximation. When \code{bool_scale = TRUE}, all estimates
+#'   are on the standardised scale of the variables. Functional estimates are
+#'   evaluated on the dense grid \code{time_g}. Subjects, variables, factors and
+#'   components are indexed by \eqn{i = 1, \dots, N}, \eqn{j = 1, \dots, p},
+#'   \eqn{q = 1, \dots, Q} and \eqn{l = 1, \dots, L}.
+#' \describe{
+#'   \item{Y}{The data used for the fit, with subject and variable names
+#'         added when missing, standardised if \code{bool_scale = TRUE}.}
+#'   \item{K}{Number of O'Sullivan spline functions used.}
+#'   \item{Q}{Number of latent factors.}
+#'   \item{L}{Number of FPCA components per factor.}
+#'   \item{list_h_hat}{List over subjects of lists over factors: posterior mean
+#'         of the latent factor trajectory \eqn{h_i^{(q)}(t)}.}
+#'   \item{list_h_low, list_h_upp}{Same structure as \code{list_h_hat}: lower
+#'         and upper bounds of the pointwise 95\% credible intervals for
+#'         \eqn{h_i^{(q)}(t)}. They account for the posterior uncertainty in
+#'         the scores only; the eigenfunctions are fixed at their posterior
+#'         means.}
+#'   \item{list_Y_hat}{List over subjects of lists over variables: fitted
+#'         curve of variable \eqn{j} for subject \eqn{i}, that is the mean
+#'         function plus the factor contributions weighted by \code{B_hat}.}
+#'   \item{list_Y_low, list_Y_upp}{Same structure as \code{list_Y_hat}: lower
+#'         and upper bounds of pointwise 95\% prediction intervals. They
+#'         account for the posterior uncertainty in the scores and for the
+#'         measurement error variance \code{sigsq_eps}, so they are intervals
+#'         for a new observation rather than for the noise-free curve. The mean
+#'         functions, loadings and eigenfunctions are fixed at their posterior
+#'         means, so the intervals somewhat understate the uncertainty.}
+#'   \item{list_mu_hat}{List over variables: posterior mean of the mean
+#'         function \eqn{\mu_j(t)}.}
+#'   \item{list_list_Phi_hat}{List over factors of \code{n_g x L} matrices:
+#'         estimated eigenfunctions after post-processing, with unit norm
+#'         under the trapezoidal rule on \code{time_g} and ordered by
+#'         decreasing eigenvalue.}
+#'   \item{list_Zeta_hat}{List over factors of \code{N x L} matrices:
+#'         posterior means of the FPCA scores, expressed in the basis of
+#'         \code{list_list_Phi_hat}.}
+#'   \item{list_Cov_zeta_hat}{List over factors of lists over subjects:
+#'         \code{L x L} posterior covariance matrices of the scores, in the
+#'         same basis as \code{list_Zeta_hat}.}
+#'   \item{list_list_zeta_ellipse}{List over factors of lists over subjects:
+#'         points of the 95\% credible ellipse for the first two scores, as
+#'         returned by \code{ellipse::ellipse}.}
+#'   \item{B_hat}{\code{p x Q} matrix: posterior means of the loadings
+#'         \eqn{b_{jq}}, that is \eqn{\gamma_{jq} m_{jq}} under the
+#'         spike-and-slab variational family.}
+#'   \item{ppi}{\code{p x Q} matrix: posterior probabilities of inclusion
+#'         \eqn{\gamma_{jq}} of variable \eqn{j} in factor \eqn{q}.}
+#'   \item{omega_hat}{Posterior means of the prior inclusion probabilities
+#'         \eqn{\omega}: a vector of length \code{Q}, or a \code{p x Q} matrix
+#'         if \code{bool_var_spec_prob = TRUE}.}
+#'   \item{factor_ppi}{Vector of length \code{Q}: posterior probability that
+#'         at least one variable is included in factor \eqn{q}, computed as
+#'         \eqn{1 - \prod_j (1 - \gamma_{jq})}.}
+#'   \item{list_cumulated_pve}{List over factors of vectors of length
+#'         \code{L}: cumulated percentage of the variance of factor \eqn{q}
+#'         explained by its first \eqn{l} components.}
+#'   \item{list_eigenvalues}{List over factors of vectors of length \code{L}:
+#'         estimated eigenvalues, computed as the sample variances across
+#'         subjects of the columns of \code{list_Zeta_hat}.}
+#'   \item{B_slab_mean, B_slab_var}{\code{p x Q} matrices: mean
+#'         \eqn{m_{jq}} and variance \eqn{s^2_{jq}} of the slab component of
+#'         the variational distribution of \eqn{b_{jq}}.}
+#'   \item{sigsq_eps}{Vector of length \code{p}: posterior means of the
+#'         measurement error variances.}
+#'   \item{factor_pve}{Proportion of variance explained by each latent
+#'         factor, computed with the default arguments of
+#'         \code{\link{get_factor_pve}}; see that function for its elements.}
+#'   \item{time_g}{Dense grid on which the functional estimates are
+#'         evaluated.}
+#'   \item{mean_mean_across_subjects, sd_mean_across_subjects}{Vectors of
+#'         length \code{p}: mean and standard deviation across subjects of the
+#'         within-subject means of each variable, used for standardisation
+#'         (\eqn{(y - mean) / sd}). They allow the estimates to be transformed
+#'         back to the original scale. \code{NULL} if
+#'         \code{bool_scale = FALSE}.}
+#'   \item{ELBO_iter}{Evidence lower bound (ELBO) at the last iteration.}
+#'   \item{i_iter}{Number of iterations run, including the annealing
+#'         iterations.}
+#'   \item{n_g}{Size of the dense grid \code{time_g}.}
+#'   \item{anneal}{Annealing settings used.}
+#'   \item{list_var_vec}{List over factors of lists over subjects: pointwise
+#'         posterior variance of \eqn{h_i^{(q)}(t)} due to the uncertainty in
+#'         the scores, used to build \code{list_h_low}, \code{list_h_upp},
+#'         \code{list_Y_low} and \code{list_Y_upp}.}
+#' }
 #'
 #' @export
 #'
@@ -957,6 +1057,27 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
     names(list_h_hat[[i]]) <- names(list_h_low[[i]]) <- names(list_h_upp[[i]]) <- paste0("factor_", 1:Q)
   }
 
+  # Factor-level PVE, see get_factor_pve(). The raw eigenvalues are kept since
+  # list_cumulated_pve has their scale divided out. The slab moments of the
+  # loadings and the noise variances are kept so that get_factor_pve() can
+  # recompute the decomposition from the fitted object.
+  names(list_eigenvalues) <- paste0("factor_", 1:Q)
+  for (q in 1:Q) {
+    names(list_eigenvalues[[q]]) <- paste0("component_", 1:L)
+  }
+  B_slab_mean <- mu_q_normal_b
+  B_slab_var <- Sigma_q_normal_b
+  dimnames(B_slab_mean) <- dimnames(B_slab_var) <- dimnames(B_hat)
+  names(sigsq_eps) <- names(Y[[1]])
+
+  factor_pve <- compute_factor_pve(B_slab_mean = B_slab_mean,
+                                   B_slab_var = B_slab_var,
+                                   ppi = ppi,
+                                   factor_ppi = factor_ppi,
+                                   list_eigenvalues = list_eigenvalues,
+                                   sigsq_eps = sigsq_eps,
+                                   time_g = time_g)
+
   if (!debug && bool_warn) {
     warning(paste0(nb_it_elbo_decrease, " occurences of ELBO not increasing monotonically, over a total of ", i_iter, " iterations."))
   }
@@ -977,6 +1098,10 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
                            omega_hat,
                            factor_ppi,
                            list_cumulated_pve,
+                           list_eigenvalues,
+                           B_slab_mean, B_slab_var,
+                           sigsq_eps,
+                           factor_pve,
                            time_g, # C_g,
                            mean_mean_across_subjects, sd_mean_across_subjects, # if bool_scale = T, to be able to scale back to original scale if needed
                            ELBO_iter,

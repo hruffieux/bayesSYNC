@@ -74,13 +74,100 @@ within-individual means are first computed, their mean and sd across
 individuals are obtained, and used to scale the measurements. Default is TRUE.}
 
 \item{bool_var_spec_prob}{Whether to use variable- (and factor-) specific
-spike-and-slab probabilities. Default is TRUE.}
+spike-and-slab probabilities. Default is FALSE.}
 
 \item{show_factor_ppi_progress}{Whether to show a plot of the factor posterior
 probabilities of inclusion as the algorithm progresses. Default is FALSE.}
 }
 \value{
-An object containing the resulting estimates.
+An object containing the resulting estimates, as a list with the
+  elements below. Posterior quantities are those of the mean-field
+  variational approximation. When \code{bool_scale = TRUE}, all estimates
+  are on the standardised scale of the variables. Functional estimates are
+  evaluated on the dense grid \code{time_g}. Subjects, variables, factors and
+  components are indexed by \eqn{i = 1, \dots, N}, \eqn{j = 1, \dots, p},
+  \eqn{q = 1, \dots, Q} and \eqn{l = 1, \dots, L}.
+\describe{
+  \item{Y}{The data used for the fit, with subject and variable names
+        added when missing, standardised if \code{bool_scale = TRUE}.}
+  \item{K}{Number of O'Sullivan spline functions used.}
+  \item{Q}{Number of latent factors.}
+  \item{L}{Number of FPCA components per factor.}
+  \item{list_h_hat}{List over subjects of lists over factors: posterior mean
+        of the latent factor trajectory \eqn{h_i^{(q)}(t)}.}
+  \item{list_h_low, list_h_upp}{Same structure as \code{list_h_hat}: lower
+        and upper bounds of the pointwise 95\% credible intervals for
+        \eqn{h_i^{(q)}(t)}. They account for the posterior uncertainty in
+        the scores only; the eigenfunctions are fixed at their posterior
+        means.}
+  \item{list_Y_hat}{List over subjects of lists over variables: fitted
+        curve of variable \eqn{j} for subject \eqn{i}, that is the mean
+        function plus the factor contributions weighted by \code{B_hat}.}
+  \item{list_Y_low, list_Y_upp}{Same structure as \code{list_Y_hat}: lower
+        and upper bounds of pointwise 95\% prediction intervals. They
+        account for the posterior uncertainty in the scores and for the
+        measurement error variance \code{sigsq_eps}, so they are intervals
+        for a new observation rather than for the noise-free curve. The mean
+        functions, loadings and eigenfunctions are fixed at their posterior
+        means, so the intervals somewhat understate the uncertainty.}
+  \item{list_mu_hat}{List over variables: posterior mean of the mean
+        function \eqn{\mu_j(t)}.}
+  \item{list_list_Phi_hat}{List over factors of \code{n_g x L} matrices:
+        estimated eigenfunctions after post-processing, with unit norm
+        under the trapezoidal rule on \code{time_g} and ordered by
+        decreasing eigenvalue.}
+  \item{list_Zeta_hat}{List over factors of \code{N x L} matrices:
+        posterior means of the FPCA scores, expressed in the basis of
+        \code{list_list_Phi_hat}.}
+  \item{list_Cov_zeta_hat}{List over factors of lists over subjects:
+        \code{L x L} posterior covariance matrices of the scores, in the
+        same basis as \code{list_Zeta_hat}.}
+  \item{list_list_zeta_ellipse}{List over factors of lists over subjects:
+        points of the 95\% credible ellipse for the first two scores, as
+        returned by \code{ellipse::ellipse}.}
+  \item{B_hat}{\code{p x Q} matrix: posterior means of the loadings
+        \eqn{b_{jq}}, that is \eqn{\gamma_{jq} m_{jq}} under the
+        spike-and-slab variational family.}
+  \item{ppi}{\code{p x Q} matrix: posterior probabilities of inclusion
+        \eqn{\gamma_{jq}} of variable \eqn{j} in factor \eqn{q}.}
+  \item{omega_hat}{Posterior means of the prior inclusion probabilities
+        \eqn{\omega}: a vector of length \code{Q}, or a \code{p x Q} matrix
+        if \code{bool_var_spec_prob = TRUE}.}
+  \item{factor_ppi}{Vector of length \code{Q}: posterior probability that
+        at least one variable is included in factor \eqn{q}, computed as
+        \eqn{1 - \prod_j (1 - \gamma_{jq})}.}
+  \item{list_cumulated_pve}{List over factors of vectors of length
+        \code{L}: cumulated percentage of the variance of factor \eqn{q}
+        explained by its first \eqn{l} components.}
+  \item{list_eigenvalues}{List over factors of vectors of length \code{L}:
+        estimated eigenvalues, computed as the sample variances across
+        subjects of the columns of \code{list_Zeta_hat}.}
+  \item{B_slab_mean, B_slab_var}{\code{p x Q} matrices: mean
+        \eqn{m_{jq}} and variance \eqn{s^2_{jq}} of the slab component of
+        the variational distribution of \eqn{b_{jq}}.}
+  \item{sigsq_eps}{Vector of length \code{p}: posterior means of the
+        measurement error variances.}
+  \item{factor_pve}{Proportion of variance explained by each latent
+        factor, computed with the default arguments of
+        \code{\link{get_factor_pve}}; see that function for its elements.}
+  \item{time_g}{Dense grid on which the functional estimates are
+        evaluated.}
+  \item{mean_mean_across_subjects, sd_mean_across_subjects}{Vectors of
+        length \code{p}: mean and standard deviation across subjects of the
+        within-subject means of each variable, used for standardisation
+        (\eqn{(y - mean) / sd}). They allow the estimates to be transformed
+        back to the original scale. \code{NULL} if
+        \code{bool_scale = FALSE}.}
+  \item{ELBO_iter}{Evidence lower bound (ELBO) at the last iteration.}
+  \item{i_iter}{Number of iterations run, including the annealing
+        iterations.}
+  \item{n_g}{Size of the dense grid \code{time_g}.}
+  \item{anneal}{Annealing settings used.}
+  \item{list_var_vec}{List over factors of lists over subjects: pointwise
+        posterior variance of \eqn{h_i^{(q)}(t)} due to the uncertainty in
+        the scores, used to build \code{list_h_low}, \code{list_h_upp},
+        \code{list_Y_low} and \code{list_Y_upp}.}
+}
 }
 \description{
 This function performs functional analysis to uncover shared latent dynamics

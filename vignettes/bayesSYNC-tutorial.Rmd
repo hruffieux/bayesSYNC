@@ -174,6 +174,19 @@ The left panel shows two factors clearly above the activity threshold and three
 near zero, recovering `Q_true = 2`. The right panel shows the cumulated variance
 climbing to essentially 100% by the second mode, recovering `L_true = 2`.
 
+Once the factors are retained, `fit$factor_pve` gives the proportion of variance
+explained by each of them. `total` is each factor's share of the variance of the
+retained factors plus the measurement error, so these values sum to less than
+one; `structured` leaves out the measurement error and sums to one. Both are
+derived from the fitted model rather than computed as an R² against the data, and
+factors that are not retained are `NA`. `get_factor_pve()` recomputes them with
+other settings, for instance to include all factors.
+
+```{r factor-pve}
+round(fit$factor_pve$total, 3)
+round(fit$factor_pve$structured, 3)
+```
+
 ## 4. Align the estimates to the truth
 
 Latent factors are identified only up to order, sign and an overall
@@ -233,10 +246,12 @@ true_curve_g <- function(i, j) {
 ### Reconstructed biomarker trajectories
 
 Each panel is one patient and one biomarker. The blue curve is the fitted
-trajectory with its 95% pointwise credible band; the grey dots are the actual
-(noisy) observations; the black curve is the noise-free truth. The band should
-cover the truth and the fit should track it even where visits are sparse, because
-the model borrows strength across subjects and biomarkers.
+trajectory with its pointwise 95% prediction band; the grey dots are the actual
+(noisy) observations; the black curve is the noise-free truth. The band includes
+the measurement error, so it is an interval for new observations rather than for
+the noise-free curve, and it should contain most of the observed points. The fit
+should track the truth even where visits are sparse, because the model borrows
+strength across subjects and biomarkers.
 
 ```{r fig-trajectories, fig.width = 10, fig.height = 2.5}
 set.seed(2)

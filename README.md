@@ -66,6 +66,13 @@ underlying diseases.
   (e.g., longitudinal measurements for each of ~20 000 genes in hundreds
   of individuals), making it practical for large-scale studies.
 
+## Warning
+
+**This is a development branch**, it is not guaranteed to be stable at
+any given time and features are subject to change. Please use the
+[stable version](https://github.com/hruffieux/bayesSYNC), unless you
+want to test and report issues.
+
 ### Installation
 
 Then, to install the package in R, run the following command:
