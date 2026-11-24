@@ -124,7 +124,8 @@ An object containing the resulting estimates, as a list with the
         same basis as \code{list_Zeta_hat}.}
   \item{list_list_zeta_ellipse}{List over factors of lists over subjects:
         points of the 95\% credible ellipse for the first two scores, as
-        returned by \code{ellipse::ellipse}.}
+        returned by \code{ellipse::ellipse}. When \code{L = 1}, each
+        element is \code{NULL}.}
   \item{B_hat}{\code{p x Q} matrix: posterior means of the loadings
         \eqn{b_{jq}}, that is \eqn{\gamma_{jq} m_{jq}} under the
         spike-and-slab variational family.}

@@ -25,7 +25,10 @@ construct_splines <- function(Q = 4, L = 3) {
   stopifnot(L <= 4)
   stopifnot(Q <= 4)
 
-  n_int_knots <- L + 2
+  # With L = 1, L + 2 gives too few knots for the cubic systems (q = 1 and
+  # q = 3) and Splinets::splinet() fails, so the knots for L = 2 are used
+  # instead. This leaves L >= 2 unchanged.
+  n_int_knots <- max(L, 2) + 2
   for (q in 1:Q) {
     if (q == 1) {
       K <- n_int_knots + 3

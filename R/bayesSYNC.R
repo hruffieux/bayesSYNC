@@ -296,7 +296,8 @@ bayesSYNC_model_choice <- function(time_obs, Y, model_choice, list_L, list_Q, K,
 #'         same basis as \code{list_Zeta_hat}.}
 #'   \item{list_list_zeta_ellipse}{List over factors of lists over subjects:
 #'         points of the 95\% credible ellipse for the first two scores, as
-#'         returned by \code{ellipse::ellipse}.}
+#'         returned by \code{ellipse::ellipse}. When \code{L = 1}, each
+#'         element is \code{NULL}.}
 #'   \item{B_hat}{\code{p x Q} matrix: posterior means of the loadings
 #'         \eqn{b_{jq}}, that is \eqn{\gamma_{jq} m_{jq}} under the
 #'         spike-and-slab variational family.}
@@ -681,9 +682,15 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
           }
 
           # avoid recomputing for each j
-          tmp_term_qil[[q]] <- rowSums(sapply(setdiff(1:L, l), function(l_tilde) { (mu_q_zeta[[q]][i,l_tilde]*mu_q_zeta[[q]][i,l] + Sigma_q_zeta[[q]][[i]][l,l_tilde])*
-              list_cp_C[[i]] %*% mu_q_nu_phi[[q]][,l_tilde]
-          }))
+          # When L = 1 there is no other component l_tilde, so the sum is empty
+          # and equals zero (sapply would return list(), on which rowSums fails).
+          if (L > 1) {
+            tmp_term_qil[[q]] <- rowSums(sapply(setdiff(1:L, l), function(l_tilde) { (mu_q_zeta[[q]][i,l_tilde]*mu_q_zeta[[q]][i,l] + Sigma_q_zeta[[q]][[i]][l,l_tilde])*
+                list_cp_C[[i]] %*% mu_q_nu_phi[[q]][,l_tilde]
+            }))
+          } else {
+            tmp_term_qil[[q]] <- rep(0, K + 2)
+          }
 
           # don't use the version below as leads to decreasing ELBO. The above version uses the updated mu_q_nu_phi[[q]] for l_tilde....
           # tmp_term_qil[[q]] <- rowSums(sapply(setdiff(1:L, l), function(l_tilde) { (mu_q_zeta[[q]][i,l_tilde]*mu_q_zeta[[q]][i,l] + Sigma_q_zeta[[q]][[i]][l,l_tilde])*
@@ -716,7 +723,10 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
           }))
         }
 
-        tr_term[[q]][[i]] <- diag(sapply(1:L, function(l) tr(list_cp_C[[i]] %*% Sigma_q_nu_phi[[q]][[l]])))
+        # nrow = L is needed for L = 1: diag() of a scalar x would otherwise
+        # return a floor(x) x floor(x) identity matrix rather than the 1 x 1
+        # matrix x.
+        tr_term[[q]][[i]] <- diag(sapply(1:L, function(l) tr(list_cp_C[[i]] %*% Sigma_q_nu_phi[[q]][[l]])), nrow = L)
         mu_H_q_phi[[q]][[i]] <- crossprod(mu_q_nu_phi[[q]], list_cp_C[[i]]) %*% mu_q_nu_phi[[q]] + tr_term[[q]][[i]]
         Sigma_q_zeta[[q]][[i]]<- solve(sum_sigma*mu_H_q_phi[[q]][[i]] + inv_Sigma_zeta) / c
         mu_q_zeta[[q]][i,] <- c * as.vector(Sigma_q_zeta[[q]][[i]]%*%crossprod(mu_q_nu_phi[[q]], sum_mu))
@@ -1046,7 +1056,10 @@ bayesSYNC_core <- function(N, p, L,Q, K, C, Y, mean_mean_across_subjects,
 
   names(list_Zeta_hat) <- names(list_Cov_zeta_hat) <- names(list_list_zeta_ellipse) <- names(list_list_Phi_hat) <- names(list_cumulated_pve) <- paste0("factor_", 1:Q)
   for (q in 1:Q) {
-    rownames(list_Zeta_hat[[q]]) <- names(list_Cov_zeta_hat[[q]]) <- names(list_list_zeta_ellipse[[q]]) <- names(Y)
+    rownames(list_Zeta_hat[[q]]) <- names(list_Cov_zeta_hat[[q]]) <- names(Y)
+    if (L > 1) { # the ellipses are NULL when L = 1 (see orthonormalise)
+      names(list_list_zeta_ellipse[[q]]) <- names(Y)
+    }
     colnames(list_Zeta_hat[[q]]) <- colnames(list_list_Phi_hat[[q]]) <- paste0("component_", 1:L)
   }
 
@@ -1271,7 +1284,9 @@ orthonormalise <- function(N, p, Q, L, time_g, C_g, # see what she has used?
 
       }
     } else {
-      list_list_zeta_ellipse[[q]] <- NULL
+      # no ellipse for a single component; list(NULL) keeps the element, whereas
+      # [[q]] <- NULL would delete it and shorten the list.
+      list_list_zeta_ellipse[q] <- list(NULL)
     }
 
 
