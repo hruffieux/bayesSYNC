@@ -52,7 +52,7 @@ underlying diseases.
 
 **This is a development branch**, it is not guaranteed to be stable at
 any given time and features are subject to change. Please use the
-[stable version](https://github.com/hruffieux/bayesFPCA), unless you
+[stable version](https://github.com/hruffieux/bayesSYNC), unless you
 want to test and report issues.
 
 **Key features:**
@@ -79,7 +79,7 @@ Then, to install the package in R, run the following command:
 
 ``` r
 if(!require(remotes)) install.packages("remotes")
-remotes::install_github("hruffieux/bayesFPCA", ref = "devel")
+remotes::install_github("hruffieux/bayesSYNC", ref = "devel")
 ```
 
 ### Authors and license
